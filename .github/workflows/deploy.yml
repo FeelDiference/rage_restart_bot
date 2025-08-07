@@ -51,10 +51,10 @@ jobs:
       - name: Deploy to production server
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
+          host: 78.37.40.131
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_PORT }}
+          port: 23
           script: |
             set -e # Прерываем выполнение при любой ошибке
             
