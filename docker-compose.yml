@@ -1,100 +1,34 @@
-# Docker Compose для Rage Restart Bot
-# Конфигурация для удаленного развертывания на продакшн сервере
-
 services:
-  # Rage Restart Bot
   rage-bot:
-    # Используем готовый образ из GitHub Container Registry для продакшн
-    image: ghcr.io/${GITHUB_REPOSITORY:-feeldiference/rage_restart_bot}/rage-restart-bot:latest
+    # Для локальной сборки раскомментируйте 'build' и закомментируйте 'image'
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    image: ghcr.io/feeldiference/rage_restart_bot/rage-restart-bot:latest
     container_name: rage-restart-bot
     restart: unless-stopped
-    
-    # Монтируем Docker socket для управления контейнерами
+
+    # Запускаем от root для доступа к docker.sock
+    # Внутри Dockerfile создается пользователь botuser, но здесь мы его переопределяем
+    user: "0:0"
+
     volumes:
-      # Docker socket для управления контейнерами
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Конфигурация (создается при развертывании)
-      - ${DEPLOY_PATH:-/opt/rage-restart-bot}/config:/app/config:ro
-      # Логи (персистентное хранение)
-      - ${DEPLOY_PATH:-/opt/rage-restart-bot}/logs:/app/logs
-      # Данные приложения
-      - ${DEPLOY_PATH:-/opt/rage-restart-bot}/data:/app/data
-    
-    # ВРЕМЕННО: Запускаем под root для исправления проблемы с docker модулем
-    user: "0:0"  # root:root
-    
-    # Переменные окружения для продакшн
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./data:/app/data
+
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       - TZ=Europe/Moscow
-      - ENVIRONMENT=production
       - LOG_LEVEL=INFO
-      - PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    
-    # Сеть для взаимодействия с Rage сервером и мониторинга портов
+
     networks:
       - rage-network
-    extra_hosts:
-      # Добавляем хост сервера для мониторинга
-      - "rage-server:78.37.40.131"
-    
-    # Зависимости (опционально, если Rage сервер в том же compose)
-    # depends_on:
-    #   - rage-server
-    
-    # Метки для организации
-    labels:
-      - "com.rage-bot.service=telegram-bot"
-      - "com.rage-bot.version=1.0"
-    
-    # Ограничения ресурсов
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-        reservations:
-          memory: 128M
-          cpus: '0.1'
-    
-    # Health check
-    healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.path.append('/app'); from src.utils.config import config_manager; config_manager.get_telegram_token()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
-  # Пример конфигурации Rage сервера (раскомментируйте если нужно)
-  # rage-server:
-  #   image: your-rage-server:latest
-  #   container_name: rage-server
-  #   restart: unless-stopped
-  #   
-  #   ports:
-  #     - "30120:30120"     # Основной порт
-  #     - "30121:30121/udp" # Voice порт
-  #     - "30122:30122"     # Query порт
-  #   
-  #   volumes:
-  #     - ./rage-server/data:/app/data
-  #     - ./rage-server/config:/app/config
-  #   
-  #   networks:
-  #     - rage-network
-  #   
-  #   labels:
-  #     - "com.rage-bot.managed=true"
-
-# Сети
 networks:
   rage-network:
     driver: bridge
     name: rage-network
-
-# Volumes для данных
-volumes:
-  bot-logs:
-    driver: local

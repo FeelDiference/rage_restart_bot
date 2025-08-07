@@ -19,7 +19,7 @@ from telegram.ext import (
     filters,
 )
 
-from src.docker.manager import ContainerStatus, DockerManager
+from src.docker_api.manager import ContainerStatus, DockerManager
 from src.monitoring.server_monitor import ServerHealth, ServerMonitor
 from src.utils.config import config_manager
 
