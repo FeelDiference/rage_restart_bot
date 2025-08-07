@@ -21,12 +21,18 @@ services:
       # Данные приложения
       - ${DEPLOY_PATH:-/opt/rage-restart-bot}/data:/app/data
     
+    # ВРЕМЕННО: Запускаем под root для исправления проблемы с docker модулем
+    user: "0:0"  # root:root
+    
     # Переменные окружения для продакшн
     environment:
       - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
       - TZ=Europe/Moscow
       - ENVIRONMENT=production
       - LOG_LEVEL=INFO
+      - PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     
     # Сеть для взаимодействия с Rage сервером и мониторинга портов
     networks:

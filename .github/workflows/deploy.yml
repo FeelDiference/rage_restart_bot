@@ -255,6 +255,13 @@ jobs:
               BUILT_IMAGE="ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest"
               docker run --rm "$BUILT_IMAGE" pip list | grep docker || echo "⚠️ Docker пакет не найден в pip list"
               
+              # Расширенная диагностика пользователя и путей
+              echo "🔍 Диагностика пользователя и окружения..."
+              docker run --rm "$BUILT_IMAGE" whoami
+              docker run --rm "$BUILT_IMAGE" id
+              docker run --rm "$BUILT_IMAGE" env | grep PYTHON
+              docker run --rm "$BUILT_IMAGE" python -c "import sys; print('Python paths:', sys.path)"
+              
               # Проверяем импорт (упрощённая версия для избежания проблем с кавычками)
               echo "🔍 Тестируем импорт docker модуля..."
               if docker run --rm "$BUILT_IMAGE" python -c "import docker, docker.errors"; then
@@ -263,8 +270,10 @@ jobs:
                 echo "❌ Проблема с импортом docker модуля"
                 echo "📋 Список установленных пакетов:"
                 docker run --rm "$BUILT_IMAGE" pip list
-                echo "🔍 Базовая проверка:"
-                docker run --rm "$BUILT_IMAGE" python -c "import docker" && echo "docker OK" || echo "docker FAIL"
+                echo "🔍 Детальная проверка:"
+                docker run --rm "$BUILT_IMAGE" python -c "import docker" && echo "docker basic OK" || echo "docker basic FAIL"
+                docker run --rm "$BUILT_IMAGE" python -c "from docker import errors" && echo "docker.errors OK" || echo "docker.errors FAIL"
+                docker run --rm "$BUILT_IMAGE" find /usr/local/lib/python3.11/site-packages -name "*docker*" -type d
               fi
             else
               echo "❌ Ошибка сборки образа"
