@@ -264,16 +264,24 @@ jobs:
               
               # Проверяем импорт (упрощённая версия для избежания проблем с кавычками)
               echo "🔍 Тестируем импорт docker модуля..."
+              echo "⚡ ТЕСТОВЫЙ контейнер (docker run --rm):"
               if docker run --rm "$BUILT_IMAGE" python -c "import docker, docker.errors"; then
-                echo "✅ Docker модуль работает корректно"
+                echo "✅ ТЕСТОВЫЙ контейнер: Docker модуль работает"
               else
-                echo "❌ Проблема с импортом docker модуля"
-                echo "📋 Список установленных пакетов:"
-                docker run --rm "$BUILT_IMAGE" pip list
-                echo "🔍 Детальная проверка:"
-                docker run --rm "$BUILT_IMAGE" python -c "import docker" && echo "docker basic OK" || echo "docker basic FAIL"
-                docker run --rm "$BUILT_IMAGE" python -c "from docker import errors" && echo "docker.errors OK" || echo "docker.errors FAIL"
-                docker run --rm "$BUILT_IMAGE" find /usr/local/lib/python3.11/site-packages -name "*docker*" -type d
+                echo "❌ ТЕСТОВЫЙ контейнер: Проблема с docker модулем"
+              fi
+              
+              echo "⚡ СИМУЛЯЦИЯ рабочего контейнера (с docker-compose настройками):"
+              # Запускаем с теми же настройками что и docker-compose
+              if docker run --rm --user "0:0" -e "PYTHONPATH=/app" -e "PYTHONUNBUFFERED=1" -e "PYTHONDONTWRITEBYTECODE=1" "$BUILT_IMAGE" python -c "import docker, docker.errors"; then
+                echo "✅ РАБОЧИЙ контейнер: Docker модуль работает"
+              else
+                echo "❌ РАБОЧИЙ контейнер: Проблема с docker модулем!"
+                echo "🔍 Детальная диагностика рабочего контейнера:"
+                docker run --rm --user "0:0" -e "PYTHONPATH=/app" "$BUILT_IMAGE" whoami
+                docker run --rm --user "0:0" -e "PYTHONPATH=/app" "$BUILT_IMAGE" python -c "import sys; print('sys.path:', sys.path)"
+                docker run --rm --user "0:0" -e "PYTHONPATH=/app" "$BUILT_IMAGE" python -c "import docker" && echo "docker basic OK" || echo "docker basic FAIL"
+                docker run --rm --user "0:0" -e "PYTHONPATH=/app" "$BUILT_IMAGE" find /usr/local/lib/python3.11/site-packages -name "*docker*" -type d
               fi
             else
               echo "❌ Ошибка сборки образа"
@@ -325,8 +333,8 @@ jobs:
             docker commit temp-fix rage-restart-bot-fixed:latest
             docker rm -f temp-fix
             
-            # Обновляем compose файл для использования исправленного образа
-            sed -i "s|ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest|rage-restart-bot-fixed:latest|g" docker-compose.override.yml
+            # Обновляем compose файл для использования исправленного образа, СОХРАНЯЯ настройки пользователя
+            sed -i "s|image: ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest|image: rage-restart-bot-fixed:latest|g" docker-compose.override.yml
             
             echo "🔄 Запуск исправленного контейнера..."
             docker compose up -d rage-bot
