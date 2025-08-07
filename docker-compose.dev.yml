@@ -1,8 +1,6 @@
 # Docker Compose для локальной разработки
 # Использует локальную сборку и volumes для live reload
 
-version: '3.8'
-
 services:
   # Rage Restart Bot (Development)
   rage-bot-dev:

@@ -1,8 +1,6 @@
 # Docker Compose для сборки на сервере (если проблемы с приватным registry)
 # Альтернативный вариант развертывания
 
-version: '3.8'
-
 services:
   # Rage Restart Bot (Build on server)
   rage-bot:
@@ -30,12 +28,9 @@ services:
       - ENVIRONMENT=production
       - LOG_LEVEL=INFO
     
-    # Сеть для взаимодействия с Rage сервером
+    # Сеть для взаимодействия с Rage сервером и мониторинга портов
     networks:
       - rage-network
-    
-    # Подключение к хосту для мониторинга портов
-    network_mode: "bridge"
     extra_hosts:
       # Добавляем хост сервера для мониторинга
       - "rage-server:78.37.40.131"
