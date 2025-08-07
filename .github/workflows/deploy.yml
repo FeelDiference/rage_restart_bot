@@ -307,6 +307,24 @@ jobs:
           # Создаем необходимые директории
           mkdir -p logs data
           
+          # КРИТИЧЕСКИ ВАЖНО: Принудительно удаляем ВСЕ кеши и образы
+          echo "🧹 ПРИНУДИТЕЛЬНАЯ очистка Docker кешей..."
+          docker system prune -f --volumes || true
+          docker rmi $(docker images -q ghcr.io/$REPO_LOWERCASE/rage-restart-bot) 2>/dev/null || true
+          docker builder prune -f || true
+          
+          # Диагностика образов ПЕРЕД запуском
+          echo "🔍 Диагностика Docker образов:"
+          echo "📋 Все образы в системе:"
+          docker images | grep -E "(rage|REPOSITORY)" || docker images | head -5
+          
+          echo "📋 Содержимое docker-compose.override.yml:"
+          cat docker-compose.override.yml | head -20
+          
+          # Принудительная пересборка через compose
+          echo "🔨 ПРИНУДИТЕЛЬНАЯ пересборка через docker-compose..."
+          docker compose build --no-cache rage-bot || docker-compose build --no-cache rage-bot
+          
           # Запускаем обновленный контейнер
           echo "▶️ Запуск нового контейнера..."
           docker compose up -d rage-bot || docker-compose up -d rage-bot
@@ -314,6 +332,16 @@ jobs:
           # Проверяем запуск контейнера
           echo "🔍 Проверка запуска контейнера..."
           sleep 10
+          
+          # КРИТИЧЕСКАЯ диагностика: какой образ РЕАЛЬНО используется
+          echo "🔍 КАКОЙ ОБРАЗ РЕАЛЬНО ИСПОЛЬЗУЕТ контейнер:"
+          docker inspect rage-restart-bot --format='{{.Config.Image}}' || echo "Контейнер не найден"
+          docker inspect rage-restart-bot --format='{{.Image}}' || echo "Image ID не найден"
+          
+          # Проверяем docker модуль ВНУТРИ РЕАЛЬНОГО контейнера
+          echo "🔍 Проверка docker модуля в РЕАЛЬНОМ контейнере:"
+          docker exec rage-restart-bot pip list | grep docker || echo "docker пакет не найден в РЕАЛЬНОМ контейнере"
+          docker exec rage-restart-bot python -c "import docker; print('Docker version:', docker.__version__)" || echo "Не удалось импортировать docker в РЕАЛЬНОМ контейнере"
           
           # Проверяем логи на наличие ошибок
           if docker logs rage-restart-bot 2>&1 | grep -q "ModuleNotFoundError.*docker"; then
