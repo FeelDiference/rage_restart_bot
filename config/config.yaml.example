@@ -36,7 +36,12 @@ monitoring:
   check_interval: 60
   
   # URL для проверки здоровья сервера (HTTP endpoint внутри контейнера)
-  health_check_url: "http://rage-server:30120/status"
+  health_check_url: "http://rage-server:30120/api/status"
+  
+  # API endpoints для получения расширенной информации
+  api_endpoints:
+    players: "http://rage-server:30120/api/players"
+    health: "http://rage-server:30120/api/health"
   
   # Таймаут для HTTP запросов
   request_timeout: 10

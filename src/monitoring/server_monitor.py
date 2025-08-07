@@ -302,37 +302,7 @@ class ServerMonitor:
             logger.error(f"Ошибка получения списка игроков: {e}")
             return {"success": False, "error": str(e), "players": []}
 
-    def get_server_info(self) -> Dict[str, Any]:
-        """
-        Получает подробную информацию о сервере.
 
-        Returns:
-            Dict[str, Any]: Информация о сервере
-        """
-        api_endpoints = self.config.get("api_endpoints", {})
-        info_url = api_endpoints.get("info")
-
-        if not info_url:
-            return {
-                "success": False,
-                "error": "API endpoint для информации не настроен",
-            }
-
-        try:
-            response = requests.get(
-                info_url,
-                timeout=self.request_timeout,
-                headers={"User-Agent": "RageBot-Monitor/1.0"},
-            )
-
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return {"success": False, "error": f"HTTP {response.status_code}"}
-
-        except Exception as e:
-            logger.error(f"Ошибка получения информации о сервере: {e}")
-            return {"success": False, "error": str(e)}
 
     def get_server_uptime(self) -> Dict[str, Any]:
         """

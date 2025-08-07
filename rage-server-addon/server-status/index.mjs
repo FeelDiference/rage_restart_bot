@@ -12,7 +12,7 @@ import express from 'express';
 
 // Конфигурация
 const CONFIG = {
-    // Порт для HTTP API (обычно основной порт сервера)
+    // Порт для HTTP API (отдельный порт для API, не основной порт сервера)
     PORT: 30120,
     
     // Путь для API
@@ -35,13 +35,13 @@ let serverStats = {
     startTime: Date.now(),
     players: {
         online: 0,
-        max: mp.config.maxplayers || 100,
+        max: 100, // Будет обновлено из конфига, если доступен
         list: []
     },
     server: {
-        name: mp.config.name || 'Rage MP Server',
+        name: 'Rage MP Server', // Будет обновлено из конфига, если доступен
         gamemode: 'RageMP',
-        version: mp.version || 'Unknown',
+        version: 'Unknown', // Будет обновлено из конфига, если доступен
         uptime: 0,
         status: 'running'
     },
@@ -117,12 +117,20 @@ app.get(CONFIG.API_PATH, (req, res) => {
  */
 app.get('/api/players', (req, res) => {
     try {
-        const players = mp.players.toArray().map(player => ({
-            id: player.id,
-            name: player.name || 'Unknown',
-            ping: player.ping || 0,
-            ip: player.ip || 'Unknown'
-        }));
+        let players = [];
+        
+        if (isMpAvailable() && mp.players) {
+            // Если mp доступен, получаем реальные данные игроков
+            players = mp.players.toArray().map(player => ({
+                id: player.id,
+                name: player.name || 'Unknown',
+                ping: player.ping || 0,
+                ip: player.ip || 'Unknown'
+            }));
+        } else {
+            // Если mp недоступен, возвращаем данные из кэша
+            players = serverStats.players.list;
+        }
         
         res.json({
             success: true,
@@ -136,7 +144,8 @@ app.get('/api/players', (req, res) => {
         console.error('[Status API] Ошибка при получении списка игроков:', error);
         res.status(500).json({
             success: false,
-            error: 'Ошибка получения списка игроков'
+            error: 'Ошибка получения списка игроков',
+            timestamp: Date.now()
         });
     }
 });
@@ -200,20 +209,57 @@ function formatUptime(uptimeMs) {
 }
 
 /**
+ * Безопасная проверка доступности объекта mp
+ */
+function isMpAvailable() {
+    return typeof mp !== 'undefined' && mp !== null;
+}
+
+/**
+ * Инициализация серверной информации из конфига
+ */
+function initializeServerInfo() {
+    try {
+        if (isMpAvailable()) {
+            // Обновляем серверную информацию из конфига mp, если доступен
+            if (mp.config) {
+                serverStats.server.name = mp.config.name || serverStats.server.name;
+                serverStats.players.max = mp.config.maxplayers || serverStats.players.max;
+            }
+            if (mp.version) {
+                serverStats.server.version = mp.version;
+            }
+            console.log('[Status API] Серверная информация инициализирована из mp.config');
+        } else {
+            console.log('[Status API] Объект mp недоступен, используем значения по умолчанию');
+        }
+    } catch (error) {
+        console.error('[Status API] Ошибка инициализации серверной информации:', error);
+    }
+}
+
+/**
  * Обновляет статистику сервера
  */
 function updateServerStats() {
     try {
-        // Обновляем информацию об игроках
-        const players = mp.players.toArray();
-        serverStats.players.online = players.length;
-        serverStats.players.list = players.map(p => ({
-            id: p.id,
-            name: p.name || 'Unknown'
-        }));
+        if (isMpAvailable() && mp.players) {
+            // Обновляем информацию об игроках, если mp доступен
+            const players = mp.players.toArray();
+            serverStats.players.online = players.length;
+            serverStats.players.list = players.map(p => ({
+                id: p.id,
+                name: p.name || 'Unknown'
+            }));
+        } else {
+            // Если mp недоступен, используем заглушку
+            console.log('[Status API] mp.players недоступен, используем заглушку для статистики игроков');
+        }
         
         // Обновляем производительность (базовая информация)
-        serverStats.performance.memoryUsage = process.memoryUsage().heapUsed / 1024 / 1024; // MB
+        if (typeof process !== 'undefined' && process.memoryUsage) {
+            serverStats.performance.memoryUsage = process.memoryUsage().heapUsed / 1024 / 1024; // MB
+        }
         
         // Обновляем время последнего обновления
         serverStats.lastUpdate = Date.now();
@@ -237,17 +283,28 @@ app.listen(CONFIG.PORT, '0.0.0.0', () => {
 setInterval(updateServerStats, CONFIG.STATS_UPDATE_INTERVAL);
 
 // События игроков для обновления статистики в реальном времени
-mp.events.add('playerJoin', (player) => {
-    console.log(`[Status API] Игрок подключился: ${player.name} (${player.id})`);
-    updateServerStats();
-});
+if (isMpAvailable() && mp.events) {
+    try {
+        mp.events.add('playerJoin', (player) => {
+            console.log(`[Status API] Игрок подключился: ${player.name} (${player.id})`);
+            updateServerStats();
+        });
 
-mp.events.add('playerQuit', (player, exitType, reason) => {
-    console.log(`[Status API] Игрок отключился: ${player.name} (${player.id})`);
-    updateServerStats();
-});
+        mp.events.add('playerQuit', (player, exitType, reason) => {
+            console.log(`[Status API] Игрок отключился: ${player.name} (${player.id})`);
+            updateServerStats();
+        });
+        
+        console.log('[Status API] События игроков успешно зарегистрированы');
+    } catch (error) {
+        console.error('[Status API] Ошибка регистрации событий игроков:', error);
+    }
+} else {
+    console.log('[Status API] mp.events недоступен, события игроков не зарегистрированы');
+}
 
 // Инициализация при загрузке
+initializeServerInfo();
 updateServerStats();
 
 console.log('[Status API] Аддон успешно загружен!');
