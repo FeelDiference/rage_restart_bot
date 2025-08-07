@@ -1,0 +1,65 @@
+# Docker Compose для сборки на сервере (если проблемы с приватным registry)
+# Альтернативный вариант развертывания
+
+version: '3.8'
+
+services:
+  # Rage Restart Bot (Build on server)
+  rage-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rage-restart-bot
+    restart: unless-stopped
+    
+    # Монтируем Docker socket для управления контейнерами
+    volumes:
+      # Docker socket для управления контейнерами
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Конфигурация (создается при развертывании)
+      - /opt/rage-restart-bot/config:/app/config:ro
+      # Логи (персистентное хранение)
+      - /opt/rage-restart-bot/logs:/app/logs
+      # Данные приложения
+      - /opt/rage-restart-bot/data:/app/data
+    
+    # Переменные окружения для продакшн
+    environment:
+      - PYTHONPATH=/app
+      - TZ=Europe/Moscow
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+    
+    # Сеть для взаимодействия с Rage сервером
+    networks:
+      - rage-network
+    
+    # Подключение к хосту для мониторинга портов
+    network_mode: "bridge"
+    extra_hosts:
+      # Добавляем хост сервера для мониторинга
+      - "rage-server:78.37.40.131"
+    
+    # Ограничения ресурсов
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.path.append('/app'); from src.utils.config import config_manager; config_manager.get_telegram_token()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Сети
+networks:
+  rage-network:
+    driver: bridge
+    name: rage-network

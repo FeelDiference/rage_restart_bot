@@ -141,13 +141,20 @@ jobs:
           echo "⏹️ Остановка старого контейнера..."
           docker-compose down || echo "Контейнер не был запущен"
           
-          # Логинимся в GitHub Container Registry
+          # Логинимся в GitHub Container Registry (приватный)
           echo "🔐 Логин в GitHub Container Registry..."
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           
-          # Скачиваем новый образ
+          # Скачиваем новый образ или собираем локально
           echo "📦 Загрузка нового образа..."
-          docker-compose pull rage-bot
+          if docker-compose pull rage-bot; then
+            echo "✅ Образ успешно загружен из registry"
+          else
+            echo "⚠️ Не удалось загрузить образ, собираем локально..."
+            # Используем альтернативный compose файл для сборки
+            cp docker-compose.build.yml docker-compose.override.yml
+            docker-compose build rage-bot
+          fi
           
           # Проверяем что конфигурация существует
           if [ ! -f "config/config.yaml" ]; then
