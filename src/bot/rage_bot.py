@@ -12,6 +12,7 @@ from telegram import BotCommand, Update
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
+    ApplicationHandlerStop,
     CallbackContext,
     CommandHandler,
     ContextTypes,
@@ -85,10 +86,14 @@ class RageBot:
         self.application.add_handler(CommandHandler("players", self._cmd_players))
         self.application.add_handler(CommandHandler("diagnose", self._cmd_diagnose))
 
-        # Фильтр для проверки авторизации
+        # Глобальная проверка авторизации ДОЛЖНА выполняться раньше всех остальных
+        # Обработчиков. Для этого используем отдельную группу с более низким
+        # номером (в PTB обработчики с меньшим номером группы выполняются раньше).
+        # Если доступ запрещён — поднимаем ApplicationHandlerStop, чтобы остановить
+        # дальнейшую обработку апдейта другими хендлерами.
         self.application.add_handler(
             MessageHandler(filters.ALL, self._check_authorization),
-            group=0,  # Выполняется первым
+            group=-1,  # Выполняется раньше хендлеров группы 0
         )
 
         logger.info("Обработчики команд зарегистрированы")
@@ -109,16 +114,20 @@ class RageBot:
         chat_id = str(update.effective_chat.id)
         user_id = str(update.effective_user.id)
 
-        # Проверяем авторизацию
+        # Проверяем авторизацию: разрешены только чаты из white-list и ЛС админов
         if not config_manager.is_chat_allowed(chat_id, user_id):
-            await update.message.reply_text(
-                "❌ У вас нет доступа к этому боту.\n"
-                "Обратитесь к администратору для получения доступа."
-            )
+            # Сообщаем пользователю и мгновенно прекращаем дальнейшую обработку
+            # текущего апдейта (ни один CommandHandler не будет вызван).
+            if update.message:
+                await update.message.reply_text(
+                    "❌ У вас нет доступа к этому боту.\n"
+                    "Обратитесь к администратору для получения доступа."
+                )
             logger.warning(
                 f"Неавторизованный доступ: пользователь {user_id} в чате {chat_id}"
             )
-            return
+            # Останавливаем дальнейшую обработку этого апдейта
+            raise ApplicationHandlerStop
 
     async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """

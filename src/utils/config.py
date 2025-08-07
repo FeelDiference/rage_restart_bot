@@ -115,6 +115,12 @@ class ConfigManager:
         Raises:
             ValueError: Если токен не настроен
         """
+        # 1) Сначала пытаемся получить токен из переменной окружения для безопасности
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        if token:
+            return token
+
+        # 2) Фолбэк на конфигурацию из YAML (менее безопасно)
         token = self.get_telegram_config().get("token")
         if not token or token == "YOUR_BOT_TOKEN_HERE":
             raise ValueError("Токен Telegram бота не настроен в конфигурации")
