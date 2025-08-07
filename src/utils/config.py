@@ -145,7 +145,7 @@ class ConfigManager:
         Returns:
             str: Имя контейнера
         """
-        return self.get_docker_config().get("container_name", "rage-server")
+        return self.get_docker_config().get("container_name", "rage_server")
 
     def is_chat_allowed(self, chat_id: str, user_id: str = None) -> bool:
         """

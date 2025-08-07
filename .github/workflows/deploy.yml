@@ -65,11 +65,16 @@ jobs:
             mkdir -p $PROJECT_DIR
             cd $PROJECT_DIR
             
-            echo "📥 Загрузка docker-compose.yml..."
+            echo "📥 Загрузка файлов конфигурации..."
             # Используем -f, чтобы curl вернул ошибку, если файл не найден
             # Добавляем заголовок авторизации для доступа к приватному репозиторию
             curl -sSLf -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -o docker-compose.yml "https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml"
+            
+            # Создаем директорию config и загружаем конфигурацию
+            mkdir -p config
+            curl -sSLf -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -o config/config.yaml "https://raw.githubusercontent.com/${{ github.repository }}/main/config/config.yaml"
             
             echo "🔐 Логин в GitHub Container Registry..."
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
