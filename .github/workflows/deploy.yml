@@ -15,6 +15,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
+      - name: Set repo name to lowercase
+        id: string
+        run: echo "repo_lowercase=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+      
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -31,7 +35,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/${{ tolower(github.repository) }}:latest
+          tags: ghcr.io/${{ steps.string.outputs.repo_lowercase }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
