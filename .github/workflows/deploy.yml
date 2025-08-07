@@ -200,53 +200,44 @@ jobs:
           echo "🔐 Логин в GitHub Container Registry..."
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           
-          # Скачиваем новый образ или собираем локально
-          echo "📦 Загрузка нового образа..."
-          # Принудительно удаляем старые образы с тем же тегом
+          # ПРИНУДИТЕЛЬНАЯ ЛОКАЛЬНАЯ СБОРКА (временное решение проблемы с docker модулем)
+          echo "🔨 Принудительная локальная сборка..."
+          
+          # Удаляем любые старые образы
           docker rmi ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest 2>/dev/null || echo "Старый образ не найден"
+          docker image prune -f
           
-          if docker compose pull rage-bot 2>/dev/null || docker-compose pull rage-bot 2>/dev/null; then
-            echo "✅ Образ успешно загружен из registry"
-            # Проверим что в образе есть docker модуль
-            if docker run --rm ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest python -c "import docker.errors" 2>/dev/null; then
-              echo "✅ Docker модуль найден в образе"
-            else
-              echo "❌ Docker модуль отсутствует, принудительная пересборка"
-              docker rmi ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest 2>/dev/null || true
-              FORCE_REBUILD=true
-            fi
-          else
-            FORCE_REBUILD=true
-          fi
-          
-          # Если нужна принудительная пересборка или образ недоступен
-          if [ "$FORCE_REBUILD" = "true" ]; then
-            echo "🔨 Принудительная локальная сборка..."
-            # Используем альтернативный compose файл для сборки
-            if [ -f "docker-compose.build.yml" ]; then
-              echo "📋 Используем docker-compose.build.yml для локальной сборки"
-              cp docker-compose.build.yml docker-compose.override.yml
-              # Принудительная пересборка без кэша
-              if docker compose build --no-cache rage-bot 2>/dev/null || docker-compose build --no-cache rage-bot 2>/dev/null; then
-                echo "✅ Локальная сборка завершена успешно"
-                # Проверяем что docker модуль установился
-                if docker run --rm rage-restart-bot python -c "import docker.errors" 2>/dev/null; then
-                  echo "✅ Docker модуль успешно установлен"
-                else
-                  echo "❌ Docker модуль всё ещё отсутствует"
-                fi
+          # Используем compose файл для сборки
+          if [ -f "docker-compose.build.yml" ]; then
+            echo "📋 Используем docker-compose.build.yml для сборки"
+            cp docker-compose.build.yml docker-compose.override.yml
+            
+            # Принудительная сборка БЕЗ кэша
+            echo "⚙️ Сборка образа без кэша..."
+            if docker compose build --no-cache rage-bot; then
+              echo "✅ Локальная сборка завершена"
+              
+              # Проверяем установку зависимостей
+              echo "🔍 Проверка установленных пакетов..."
+              docker run --rm rage-restart-bot pip list | grep docker || echo "⚠️ Docker пакет не найден в pip list"
+              
+              # Проверяем импорт
+              echo "🔍 Тестируем импорт docker модуля..."
+              if docker run --rm rage-restart-bot python -c "import docker; import docker.errors; print('Docker модуль успешно импортирован')"; then
+                echo "✅ Docker модуль работает корректно"
               else
-                echo "❌ Ошибка локальной сборки, пробуем fallback образ"
-                rm -f docker-compose.override.yml
-                # Устанавливаем fallback образ в .env
-                echo "FALLBACK_IMAGE=python:3.11-slim" >> .env
-                echo "⚠️ Будет использован базовый Python образ"
+                echo "❌ Проблема с импортом docker модуля"
+                # Показываем что установлено
+                echo "📋 Список установленных пакетов:"
+                docker run --rm rage-restart-bot pip list
               fi
             else
-              echo "⚠️ docker-compose.build.yml не найден"
-              echo "FALLBACK_IMAGE=python:3.11-slim" >> .env
-              echo "⚠️ Будет использован базовый Python образ"
+              echo "❌ Ошибка сборки образа"
+              exit 1
             fi
+          else
+            echo "❌ docker-compose.build.yml не найден!"
+            exit 1
           fi
           
           # Проверяем что конфигурация существует
@@ -268,13 +259,33 @@ jobs:
           echo "▶️ Запуск нового контейнера..."
           docker compose up -d rage-bot || docker-compose up -d rage-bot
           
-          # Проверяем запуск и при необходимости исправляем проблему с docker модулем
-          sleep 5
-          if docker logs rage-restart-bot 2>&1 | grep -q "ModuleNotFoundError: No module named 'docker.errors'"; then
-            echo "🔧 Обнаружена проблема с docker модулем, исправляем..."
-            docker exec rage-restart-bot pip install docker==6.1.3 || echo "Не удалось установить docker модуль"
-            docker restart rage-restart-bot
-            echo "🔄 Контейнер перезапущен с исправлением"
+          # Проверяем запуск контейнера
+          echo "🔍 Проверка запуска контейнера..."
+          sleep 10
+          
+          # Проверяем логи на наличие ошибок
+          if docker logs rage-restart-bot 2>&1 | grep -q "ModuleNotFoundError.*docker"; then
+            echo "❌ КРИТИЧЕСКАЯ ОШИБКА: Docker модуль всё ещё отсутствует!"
+            echo "📋 Полные логи контейнера:"
+            docker logs rage-restart-bot
+            echo ""
+            echo "🔧 Попытка экстренного исправления..."
+            
+            # Пробуем установить в работающий контейнер
+            if docker exec rage-restart-bot bash -c "pip install --no-cache-dir docker==6.1.3"; then
+              echo "✅ Docker модуль установлен в runtime"
+              docker restart rage-restart-bot
+              sleep 5
+            else
+              echo "❌ Не удалось установить docker модуль даже в runtime"
+              echo "🛠️ Показываем отладочную информацию:"
+              docker exec rage-restart-bot python --version
+              docker exec rage-restart-bot pip --version
+              docker exec rage-restart-bot pip list | head -10
+              exit 1
+            fi
+          else
+            echo "✅ Контейнер запускается без ошибок модулей"
           fi
           
           # Ждем запуска и проверяем статус

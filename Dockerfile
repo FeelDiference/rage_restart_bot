@@ -1,8 +1,7 @@
 # Dockerfile для Rage Restart Bot
-# Многоэтапная сборка для оптимизации размера образа
+# Упрощённая сборка для надёжности (временно, до решения проблемы с зависимостями)
 
-# Этап 1: Базовый образ с зависимостями
-FROM python:3.11-slim as base
+FROM python:3.11-slim
 
 # Устанавливаем системные зависимости
 RUN apt-get update && apt-get install -y \
@@ -16,16 +15,11 @@ RUN apt-get update && apt-get install -y \
 # Создаем пользователя для запуска приложения (безопасность)
 RUN groupadd -r botuser && useradd -r -g botuser botuser
 
-# Этап 2: Установка Python зависимостей
-FROM base as dependencies
-
 # Устанавливаем pip зависимости
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r /tmp/requirements.txt
-
-# Этап 3: Финальный образ
-FROM dependencies as final
+    pip install --no-cache-dir -r /tmp/requirements.txt && \
+    pip list | grep docker
 
 # Метаданные образа
 LABEL maintainer="rage-bot-team" \
