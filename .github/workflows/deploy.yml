@@ -202,16 +202,39 @@ jobs:
           
           # Скачиваем новый образ или собираем локально
           echo "📦 Загрузка нового образа..."
+          # Принудительно удаляем старые образы с тем же тегом
+          docker rmi ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest 2>/dev/null || echo "Старый образ не найден"
+          
           if docker compose pull rage-bot 2>/dev/null || docker-compose pull rage-bot 2>/dev/null; then
             echo "✅ Образ успешно загружен из registry"
+            # Проверим что в образе есть docker модуль
+            if docker run --rm ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest python -c "import docker.errors" 2>/dev/null; then
+              echo "✅ Docker модуль найден в образе"
+            else
+              echo "❌ Docker модуль отсутствует, принудительная пересборка"
+              docker rmi ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest 2>/dev/null || true
+              FORCE_REBUILD=true
+            fi
           else
-            echo "⚠️ Не удалось загрузить образ, пробуем локальную сборку..."
+            FORCE_REBUILD=true
+          fi
+          
+          # Если нужна принудительная пересборка или образ недоступен
+          if [ "$FORCE_REBUILD" = "true" ]; then
+            echo "🔨 Принудительная локальная сборка..."
             # Используем альтернативный compose файл для сборки
             if [ -f "docker-compose.build.yml" ]; then
               echo "📋 Используем docker-compose.build.yml для локальной сборки"
               cp docker-compose.build.yml docker-compose.override.yml
-              if docker compose build rage-bot 2>/dev/null || docker-compose build rage-bot 2>/dev/null; then
+              # Принудительная пересборка без кэша
+              if docker compose build --no-cache rage-bot 2>/dev/null || docker-compose build --no-cache rage-bot 2>/dev/null; then
                 echo "✅ Локальная сборка завершена успешно"
+                # Проверяем что docker модуль установился
+                if docker run --rm rage-restart-bot python -c "import docker.errors" 2>/dev/null; then
+                  echo "✅ Docker модуль успешно установлен"
+                else
+                  echo "❌ Docker модуль всё ещё отсутствует"
+                fi
               else
                 echo "❌ Ошибка локальной сборки, пробуем fallback образ"
                 rm -f docker-compose.override.yml
@@ -244,6 +267,15 @@ jobs:
           # Запускаем обновленный контейнер
           echo "▶️ Запуск нового контейнера..."
           docker compose up -d rage-bot || docker-compose up -d rage-bot
+          
+          # Проверяем запуск и при необходимости исправляем проблему с docker модулем
+          sleep 5
+          if docker logs rage-restart-bot 2>&1 | grep -q "ModuleNotFoundError: No module named 'docker.errors'"; then
+            echo "🔧 Обнаружена проблема с docker модулем, исправляем..."
+            docker exec rage-restart-bot pip install docker==6.1.3 || echo "Не удалось установить docker модуль"
+            docker restart rage-restart-bot
+            echo "🔄 Контейнер перезапущен с исправлением"
+          fi
           
           # Ждем запуска и проверяем статус
           echo "⏳ Ожидание запуска..."

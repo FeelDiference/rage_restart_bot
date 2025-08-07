@@ -15,11 +15,11 @@ services:
       # Docker socket для управления контейнерами
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Конфигурация (создается при развертывании)
-      - /opt/rage-restart-bot/config:/app/config:ro
+      - ${DEPLOY_PATH:-/opt/rage-restart-bot}/config:/app/config:ro
       # Логи (персистентное хранение)
-      - /opt/rage-restart-bot/logs:/app/logs
+      - ${DEPLOY_PATH:-/opt/rage-restart-bot}/logs:/app/logs
       # Данные приложения
-      - /opt/rage-restart-bot/data:/app/data
+      - ${DEPLOY_PATH:-/opt/rage-restart-bot}/data:/app/data
     
     # Переменные окружения для продакшн
     environment:
