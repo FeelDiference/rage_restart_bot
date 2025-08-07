@@ -430,7 +430,7 @@ class ServerMonitor:
 
         # Сводка
         summary = details["summary"]
-        report += f"\n📊 **Сводка:**\n"
+        report += "\n📊 **Сводка:**\n"
         report += f"  • Доступные порты: {summary['available_ports']}\n"
         report += f"  • API доступен: {'Да' if summary['http_accessible'] else 'Нет'}\n"
 

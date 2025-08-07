@@ -461,7 +461,7 @@ class RageBot:
 
         # Порты
         if info.get("ports"):
-            text += f"\n🔌 **Порты:**\n"
+            text += "\n🔌 **Порты:**\n"
             for container_port, host_bindings in info["ports"].items():
                 if host_bindings:
                     for binding in host_bindings:
@@ -507,7 +507,9 @@ class RageBot:
                 else:
                     ping_emoji = "🔴"
 
-                text += f"{i}. **{player_name}** (ID: {player_id}) {ping_emoji} {ping}ms\n"
+                text += (
+                    f"{i}. **{player_name}** (ID: {player_id}) {ping_emoji} {ping}ms\n"
+                )
 
             # Если игроков больше чем показываем
             if count > max_display:
