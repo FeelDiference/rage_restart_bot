@@ -1,11 +1,10 @@
 """
-Модуль для управления Docker контейнером с Rage сервером.
-Обеспечивает операции запуска, остановки, рестарта и мониторинга.
+Менеджер для взаимодействия с Docker контейнером Rage сервера.
 """
 
-import time
+import asyncio
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Optional
 
 import docker
 from docker.errors import APIError, DockerException, NotFound
@@ -14,296 +13,173 @@ from loguru import logger
 
 class ContainerStatus(Enum):
     """
-    Статусы контейнера.
+    Статус Docker контейнера.
     """
-
-    RUNNING = "running"  # Контейнер работает
-    STOPPED = "stopped"  # Контейнер остановлен
-    STARTING = "starting"  # Контейнер запускается
-    STOPPING = "stopping"  # Контейнер останавливается
-    RESTARTING = "restarting"  # Контейнер перезапускается
-    NOT_FOUND = "not_found"  # Контейнер не найден
-    ERROR = "error"  # Ошибка
+    RUNNING = "running"
+    STOPPED = "stopped"
+    NOT_FOUND = "not_found"
+    ERROR = "error"
 
 
 class DockerManager:
     """
-    Менеджер для управления Docker контейнером с Rage сервером.
-
-    Attributes:
-        client: Docker клиент
-        container_name (str): Имя управляемого контейнера
-        restart_timeout (int): Таймаут для операций рестарта
+    Управляет Docker контейнером: старт, стоп, рестарт, проверка статуса.
     """
 
     def __init__(self, container_name: str, restart_timeout: int = 30):
         """
-        Инициализация Docker менеджера.
+        Инициализация DockerManager.
 
         Args:
-            container_name (str): Имя контейнера для управления
-            restart_timeout (int): Таймаут в секундах для операций
+            container_name (str): Имя Docker контейнера.
+            restart_timeout (int): Таймаут для рестарта в секундах.
         """
         self.container_name = container_name
         self.restart_timeout = restart_timeout
-
         try:
-            # Инициализация Docker клиента
             self.client = docker.from_env()
-            logger.info("Docker клиент успешно инициализирован")
+            logger.info("Успешное подключение к Docker API.")
         except DockerException as e:
-            logger.error(f"Ошибка подключения к Docker: {e}")
-            raise
+            logger.error(f"Не удалось подключиться к Docker API: {e}")
+            logger.error(
+                "Убедитесь, что Docker запущен и сокет доступен по пути /var/run/docker.sock"
+            )
+            self.client = None
 
-    def get_container_status(self) -> ContainerStatus:
+    async def _get_container(self):
         """
-        Получает текущий статус контейнера.
+        Получает объект контейнера по имени.
 
         Returns:
-            ContainerStatus: Текущий статус контейнера
+            Container: Объект контейнера или None, если не найден.
         """
+        if not self.client:
+            logger.warning("Клиент Docker не инициализирован.")
+            return None
+        
+        logger.info(f"Попытка найти контейнер по имени: '{self.container_name}'")
         try:
-            container = self.client.containers.get(self.container_name)
-            status = container.status.lower()
-
-            # Маппинг статусов Docker в наши статусы
-            status_mapping = {
-                "running": ContainerStatus.RUNNING,
-                "exited": ContainerStatus.STOPPED,
-                "created": ContainerStatus.STOPPED,
-                "restarting": ContainerStatus.RESTARTING,
-                "removing": ContainerStatus.STOPPING,
-                "paused": ContainerStatus.STOPPED,
-                "dead": ContainerStatus.ERROR,
-            }
-
-            return status_mapping.get(status, ContainerStatus.ERROR)
-
+            return self.client.containers.get(self.container_name)
         except NotFound:
-            logger.warning(f"Контейнер {self.container_name} не найден")
+            logger.warning(f"Контейнер с именем '{self.container_name}' не найден.")
+            
+            # Альтернативный метод: ищем среди всех контейнеров
+            logger.info("Поиск среди всех доступных контейнеров...")
+            try:
+                containers = self.client.containers.list(all=True)
+                if not containers:
+                    logger.warning("Не найдено ни одного контейнера в системе.")
+                    return None
+                
+                logger.info(f"Найдено {len(containers)} контейнеров. Проверка имен:")
+                for container in containers:
+                    logger.info(f" - Найден контейнер: ID={container.short_id}, Имя='{container.name}'")
+                    if container.name == self.container_name:
+                        logger.info(f"✅ Контейнер '{self.container_name}' найден по имени среди всех контейнеров.")
+                        return container
+                
+                logger.warning(f"Контейнер '{self.container_name}' так и не был найден по имени.")
+                return None
+
+            except APIError as e:
+                logger.error(f"Ошибка Docker API при получении списка всех контейнеров: {e}")
+                return None
+        except APIError as e:
+            logger.error(f"Ошибка Docker API при поиске контейнера: {e}")
+            return None
+
+    async def get_status(self) -> ContainerStatus:
+        """
+        Получает статус контейнера.
+
+        Returns:
+            ContainerStatus: Текущий статус контейнера.
+        """
+        logger.info(f"Запрос статуса для контейнера '{self.container_name}'")
+        try:
+            container = await self._get_container()
+            if container:
+                logger.info(f"Статус контейнера '{self.container_name}': {container.status}")
+                if container.status == "running":
+                    return ContainerStatus.RUNNING
+                else:
+                    return ContainerStatus.STOPPED
             return ContainerStatus.NOT_FOUND
-        except DockerException as e:
-            logger.error(f"Ошибка получения статуса контейнера: {e}")
+        except Exception as e:
+            logger.error(f"Ошибка при получении статуса контейнера: {e}")
             return ContainerStatus.ERROR
 
-    def get_container_info(self) -> Dict[str, Any]:
-        """
-        Получает подробную информацию о контейнере.
-
-        Returns:
-            Dict[str, Any]: Информация о контейнере
-        """
-        try:
-            container = self.client.containers.get(self.container_name)
-
-            # Получаем статистику контейнера
-            stats = container.stats(stream=False)
-
-            info = {
-                "name": container.name,
-                "status": container.status,
-                "image": container.image.tags[0] if container.image.tags else "unknown",
-                "created": container.attrs["Created"],
-                "started_at": container.attrs["State"].get("StartedAt"),
-                "finished_at": container.attrs["State"].get("FinishedAt"),
-                "restart_count": container.attrs["RestartCount"],
-                "ports": container.ports,
-                "cpu_usage": self._calculate_cpu_usage(stats),
-                "memory_usage": self._calculate_memory_usage(stats),
-            }
-
-            return info
-
-        except NotFound:
-            return {"error": "Контейнер не найден"}
-        except DockerException as e:
-            logger.error(f"Ошибка получения информации о контейнере: {e}")
-            return {"error": str(e)}
-
-    def start_container(self) -> bool:
+    async def start(self) -> bool:
         """
         Запускает контейнер.
 
         Returns:
-            bool: True если контейнер успешно запущен
+            bool: True, если контейнер успешно запущен, иначе False.
         """
+        logger.info(f"Попытка запуска контейнера '{self.container_name}'")
         try:
-            container = self.client.containers.get(self.container_name)
-
+            container = await self._get_container()
+            if not container:
+                logger.error("Не удалось запустить: контейнер не найден.")
+                return False
             if container.status == "running":
-                logger.info(f"Контейнер {self.container_name} уже запущен")
+                logger.warning("Контейнер уже запущен.")
                 return True
-
-            logger.info(f"Запуск контейнера {self.container_name}")
             container.start()
-
-            # Ждем запуска
-            return self._wait_for_status(ContainerStatus.RUNNING, self.restart_timeout)
-
-        except NotFound:
-            logger.error(f"Контейнер {self.container_name} не найден")
+            logger.info("Контейнер успешно запущен.")
+            return True
+        except APIError as e:
+            logger.error(f"Ошибка Docker API при запуске контейнера: {e}")
             return False
-        except DockerException as e:
-            logger.error(f"Ошибка запуска контейнера: {e}")
+        except Exception as e:
+            logger.error(f"Непредвиденная ошибка при запуске контейнера: {e}")
             return False
 
-    def stop_container(self) -> bool:
+    async def stop(self) -> bool:
         """
         Останавливает контейнер.
 
         Returns:
-            bool: True если контейнер успешно остановлен
+            bool: True, если контейнер успешно остановлен, иначе False.
         """
+        logger.info(f"Попытка остановки контейнера '{self.container_name}'")
         try:
-            container = self.client.containers.get(self.container_name)
-
+            container = await self._get_container()
+            if not container:
+                logger.error("Не удалось остановить: контейнер не найден.")
+                return False
             if container.status != "running":
-                logger.info(f"Контейнер {self.container_name} уже остановлен")
+                logger.warning("Контейнер уже остановлен.")
                 return True
-
-            logger.info(f"Остановка контейнера {self.container_name}")
-            container.stop(timeout=self.restart_timeout)
-
-            # Ждем остановки
-            return self._wait_for_status(ContainerStatus.STOPPED, self.restart_timeout)
-
-        except NotFound:
-            logger.error(f"Контейнер {self.container_name} не найден")
+            container.stop()
+            logger.info("Контейнер успешно остановлен.")
+            return True
+        except APIError as e:
+            logger.error(f"Ошибка Docker API при остановке контейнера: {e}")
             return False
-        except DockerException as e:
-            logger.error(f"Ошибка остановки контейнера: {e}")
+        except Exception as e:
+            logger.error(f"Непредвиденная ошибка при остановке контейнера: {e}")
             return False
 
-    def restart_container(self) -> bool:
+    async def restart(self) -> bool:
         """
         Перезапускает контейнер.
 
         Returns:
-            bool: True если контейнер успешно перезапущен
+            bool: True, если контейнер успешно перезапущен, иначе False.
         """
+        logger.info(f"Попытка перезапуска контейнера '{self.container_name}'")
         try:
-            container = self.client.containers.get(self.container_name)
-
-            logger.info(f"Перезапуск контейнера {self.container_name}")
-            container.restart(timeout=self.restart_timeout)
-
-            # Ждем успешного перезапуска
-            return self._wait_for_status(
-                ContainerStatus.RUNNING, self.restart_timeout * 2
-            )
-
-        except NotFound:
-            logger.error(f"Контейнер {self.container_name} не найден")
-            return False
-        except DockerException as e:
-            logger.error(f"Ошибка перезапуска контейнера: {e}")
-            return False
-
-    def get_container_logs(self, lines: int = 50) -> str:
-        """
-        Получает логи контейнера.
-
-        Args:
-            lines (int): Количество последних строк логов
-
-        Returns:
-            str: Логи контейнера
-        """
-        try:
-            container = self.client.containers.get(self.container_name)
-            logs = container.logs(tail=lines, timestamps=True).decode("utf-8")
-            return logs
-
-        except NotFound:
-            return "Контейнер не найден"
-        except DockerException as e:
-            logger.error(f"Ошибка получения логов: {e}")
-            return f"Ошибка получения логов: {e}"
-
-    def _wait_for_status(self, target_status: ContainerStatus, timeout: int) -> bool:
-        """
-        Ожидает достижения контейнером определенного статуса.
-
-        Args:
-            target_status (ContainerStatus): Ожидаемый статус
-            timeout (int): Таймаут ожидания в секундах
-
-        Returns:
-            bool: True если статус достигнут в пределах таймаута
-        """
-        start_time = time.time()
-
-        while time.time() - start_time < timeout:
-            current_status = self.get_container_status()
-
-            if current_status == target_status:
-                logger.info(f"Контейнер достиг статуса {target_status.value}")
-                return True
-
-            if current_status == ContainerStatus.ERROR:
-                logger.error("Контейнер в состоянии ошибки")
+            container = await self._get_container()
+            if not container:
+                logger.error("Не удалось перезапустить: контейнер не найден.")
                 return False
-
-            time.sleep(2)  # Проверяем каждые 2 секунды
-
-        logger.warning(f"Таймаут ожидания статуса {target_status.value}")
-        return False
-
-    def _calculate_cpu_usage(self, stats: Dict[str, Any]) -> float:
-        """
-        Вычисляет использование CPU в процентах.
-
-        Args:
-            stats (Dict[str, Any]): Статистика контейнера
-
-        Returns:
-            float: Процент использования CPU
-        """
-        try:
-            cpu_delta = (
-                stats["cpu_stats"]["cpu_usage"]["total_usage"]
-                - stats["precpu_stats"]["cpu_usage"]["total_usage"]
-            )
-            system_delta = (
-                stats["cpu_stats"]["system_cpu_usage"]
-                - stats["precpu_stats"]["system_cpu_usage"]
-            )
-
-            if system_delta > 0:
-                cpu_percent = (
-                    (cpu_delta / system_delta)
-                    * len(stats["cpu_stats"]["cpu_usage"]["percpu_usage"])
-                    * 100
-                )
-                return round(cpu_percent, 2)
-        except (KeyError, ZeroDivisionError):
-            pass
-
-        return 0.0
-
-    def _calculate_memory_usage(self, stats: Dict[str, Any]) -> Dict[str, str]:
-        """
-        Вычисляет использование памяти.
-
-        Args:
-            stats (Dict[str, Any]): Статистика контейнера
-
-        Returns:
-            Dict[str, str]: Информация об использовании памяти
-        """
-        try:
-            memory_usage = stats["memory_stats"]["usage"]
-            memory_limit = stats["memory_stats"]["limit"]
-
-            # Конвертируем в мегабайты
-            usage_mb = round(memory_usage / 1024 / 1024, 2)
-            limit_mb = round(memory_limit / 1024 / 1024, 2)
-            percentage = round((memory_usage / memory_limit) * 100, 2)
-
-            return {
-                "usage": f"{usage_mb} MB",
-                "limit": f"{limit_mb} MB",
-                "percentage": f"{percentage}%",
-            }
-        except KeyError:
-            return {"usage": "N/A", "limit": "N/A", "percentage": "N/A"}
+            container.restart(timeout=self.restart_timeout)
+            logger.info("Контейнер успешно перезапущен.")
+            return True
+        except APIError as e:
+            logger.error(f"Ошибка Docker API при перезапуске контейнера: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Непредвиденная ошибка при перезапуске контейнера: {e}")
+            return False
