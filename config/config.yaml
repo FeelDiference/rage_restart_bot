@@ -44,11 +44,10 @@ monitoring:
     health: "http://rage_server:30120/api/health"
   
   # Таймаут для HTTP запросов
-  request_timeout: 10
+  request_timeout: 15
   
   # Порты для проверки доступности (TCP проверка)
   tcp_ports:
-    - 22005  # Основной Rage MP порт (игровой)
     - 30120  # HTTP API порт (server-status аддон)
   
   # Хост для проверки портов (IP сервера или имя контейнера)

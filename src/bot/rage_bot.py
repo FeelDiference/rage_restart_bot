@@ -511,7 +511,7 @@ class RageBot:
 
         # Порты
         if info.get("ports"):
-            text += "\n🔌 Порты:\n"
+            text += "\n🔌 Порт  API:\n"
             for container_port, host_bindings in info["ports"].items():
                 if host_bindings:
                     for binding in host_bindings:

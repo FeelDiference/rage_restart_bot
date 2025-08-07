@@ -1,0 +1,36 @@
+# Docker Compose для Rage MP сервера
+# Этот файл обеспечивает подключение Rage сервера к сети rage-network
+# для связи с ботом
+
+services:
+  rage-server:
+    # Используйте ваш существующий образ Rage сервера
+    image: your-rage-server-image:latest  # ЗАМЕНИТЕ НА ВАШ ОБРАЗ
+    container_name: rage_server
+    restart: unless-stopped
+    
+    # Порты (если нужно проброс наружу)
+    # ports:
+    #   - "22005:22005"  # Основной игровой порт
+    #   - "30120:30120"  # API порт (опционально)
+    
+    # Примеры томов (настройте под ваши нужды)
+    volumes:
+      - ./rage-server-data:/opt/rage-server/data
+      - ./rage-server-addon:/opt/rage-server/packages/server-status
+      # Добавьте другие тома по необходимости
+    
+    # Переменные окружения (если нужны)
+    environment:
+      - TZ=Europe/Moscow
+      # Добавьте другие переменные по необходимости
+    
+    # ВАЖНО: подключаем к сети rage-network для связи с ботом
+    networks:
+      - rage-network
+
+# Используем внешнюю сеть, созданную в основном docker-compose.yml
+networks:
+  rage-network:
+    external: true
+    name: rage-network
