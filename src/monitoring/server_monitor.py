@@ -240,9 +240,7 @@ class ServerMonitor:
 
         # Если основной порт (30120) доступен, но есть проблемы - деградация
         main_port_available = any(
-            port == 30120
-            for port in self.tcp_ports
-            if self._is_port_available(port)
+            port == 30120 for port in self.tcp_ports if self._is_port_available(port)
         )
 
         if main_port_available:

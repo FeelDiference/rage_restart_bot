@@ -58,9 +58,7 @@ class RageBot:
 
         # Создаем приложение
         self.application = (
-            Application.builder()
-            .token(config_manager.get_telegram_token())
-            .build()
+            Application.builder().token(config_manager.get_telegram_token()).build()
         )
 
         # Регистрируем обработчики
@@ -299,9 +297,7 @@ class RageBot:
                     f"🔍 Статус: {server_health.value.upper()}\n"
                     f"👤 Инициатор: {update.effective_user.first_name}"
                 )
-                logger.info(
-                    f"Сервер запущен пользователем {update.effective_user.id}"
-                )
+                logger.info(f"Сервер запущен пользователем {update.effective_user.id}")
             else:
                 result_text = "❌ **Ошибка при запуске сервера!**"
                 logger.error(
@@ -358,7 +354,9 @@ class RageBot:
         """
         Обработчик команды /info.
         """
-        info_msg = await update.message.reply_text("📊 Собираю информацию о контейнере...")
+        info_msg = await update.message.reply_text(
+            "📊 Собираю информацию о контейнере..."
+        )
 
         try:
             container_info = self.docker_manager.get_container_info()
@@ -457,7 +455,9 @@ class RageBot:
 
         if info.get("memory_usage"):
             mem = info["memory_usage"]
-            text += f"💾 **Память:** {mem['usage']} / {mem['limit']} ({mem['percentage']})\n"
+            text += (
+                f"💾 **Память:** {mem['usage']} / {mem['limit']} ({mem['percentage']})\n"
+            )
 
         # Порты
         if info.get("ports"):
