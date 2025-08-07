@@ -1,0 +1,71 @@
+# Конфигурация Telegram бота для управления Rage сервером
+
+telegram:
+  # Токен бота от @BotFather
+  token: "8236148207:AAHmQqgRzkq13QttAs_qLRm9mrli6SjFCr8"
+  
+  # Список разрешенных групп (ID групп Telegram, начинаются с -)
+  allowed_groups: 
+    - "-2369193895"  # Замените на ID вашей группы
+  
+  # Дополнительно разрешенные администраторы (для личных сообщений)
+  admin_users:
+    - "213586942"
+  
+  # Команды бота
+  commands:
+    start: "Запустить бота"
+    status: "Проверить статус сервера"
+    restart: "Перезапустить сервер"
+    stop: "Остановить сервер"
+    start_server: "Запустить сервер"
+    help: "Показать справку"
+
+docker:
+  # Имя контейнера с Rage сервером
+  container_name: "rage-server"
+  
+  # Таймаут для рестарта (в секундах)
+  restart_timeout: 30
+  
+  # Docker socket (для Linux обычно /var/run/docker.sock)
+  socket: "/var/run/docker.sock"
+
+monitoring:
+  # Интервал проверки статуса (в секундах)
+  check_interval: 60
+  
+  # URL для проверки здоровья сервера (HTTP endpoint внутри контейнера)
+  health_check_url: "http://rage-server:30120/status"
+  
+  # Таймаут для HTTP запросов
+  request_timeout: 10
+  
+  # Порты для проверки доступности (TCP проверка)
+  tcp_ports:
+    - 30120  # Основной Rage MP порт
+    - 30121  # Voice порт
+    - 30122  # Server query порт
+  
+  # Хост для проверки портов (IP сервера или имя контейнера)
+  host: "localhost"
+
+logging:
+  # Уровень логирования
+  level: "INFO"
+  
+  # Файл для логов
+  file: "logs/bot.log"
+  
+  # Максимальный размер файла лога (в байтах)
+  max_size: 10485760  # 10MB
+  
+  # Количество файлов логов для хранения
+  rotation: 5
+
+security:
+  # Максимальное количество попыток рестарта в час
+  max_restarts_per_hour: 10
+  
+  # Блокировка после превышения лимита (в минутах)
+  block_duration: 30 

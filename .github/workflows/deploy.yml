@@ -158,9 +158,8 @@ jobs:
           
           # Проверяем что конфигурация существует
           if [ ! -f "config/config.yaml" ]; then
-            echo "⚠️ Создание конфигурации из примера..."
-            cp config/config.yaml.example config/config.yaml
-            echo "❗ ВНИМАНИЕ: Необходимо настроить config/config.yaml!"
+            echo "❌ Файл config/config.yaml не найден в репозитории!"
+            exit 1
           fi
           
           # Создаем необходимые директории

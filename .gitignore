@@ -129,7 +129,7 @@ logs/
 *.log
 
 # Configuration files with secrets (содержат токены и приватные данные)
-config/config.yaml
+# config/config.yaml - Убрано, т.к. репозиторий приватный
 !config/config.yaml.example
 
 # IDE files

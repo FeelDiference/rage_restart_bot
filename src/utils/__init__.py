@@ -1,1 +1,1 @@
-# Утилиты для Rage Restart Bot 
+# Утилиты для Rage Restart Bot
