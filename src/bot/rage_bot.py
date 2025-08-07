@@ -82,6 +82,7 @@ class RageBot:
         self.application.add_handler(CommandHandler("logs", self._cmd_logs))
         self.application.add_handler(CommandHandler("info", self._cmd_info))
         self.application.add_handler(CommandHandler("players", self._cmd_players))
+        self.application.add_handler(CommandHandler("diagnose", self._cmd_diagnose))
 
         # Фильтр для проверки авторизации
         self.application.add_handler(
@@ -154,7 +155,8 @@ class RageBot:
             "**Мониторинг:**\n"
             "• `/logs [строки]` - Показать последние логи (по умолчанию 20)\n"
             "• `/info` - Подробная информация о контейнере\n"
-            "• `/players` - Список игроков онлайн\n\n"
+            "• `/players` - Список игроков онлайн\n"
+            "• `/diagnose` - Диагностика поиска контейнера\n\n"
             "**Статусы сервера:**\n"
             "• ✅ HEALTHY - Сервер работает нормально\n"
             "• ⚠️ DEGRADED - Сервер работает с проблемами\n"
@@ -401,6 +403,53 @@ class RageBot:
             await players_msg.edit_text(error_text)
             logger.error(f"Ошибка команды /players: {e}")
 
+    async def _cmd_diagnose(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Обработчик команды /diagnose - диагностика поиска контейнера.
+        """
+        diag_msg = await update.message.reply_text("🔍 Запуск диагностики Docker...")
+
+        try:
+            # Получаем диагностическую информацию
+            diagnosis = self.docker_manager.diagnose_container_detection()
+            
+            # Форматируем сообщение
+            result_text = "📊 **Диагностика Docker контейнера:**\n\n"
+            result_text += f"🎯 **Искомый контейнер:** `{diagnosis['target_container_name']}`\n"
+            result_text += f"🔌 **Docker подключен:** {'✅ Да' if diagnosis['docker_connected'] else '❌ Нет'}\n"
+            
+            if diagnosis.get('error'):
+                result_text += f"❌ **Ошибка:** {diagnosis['error']}\n\n"
+            else:
+                result_text += f"🔍 **Найден целевой контейнер:** {'✅ Да' if diagnosis['target_found'] else '❌ Нет'}\n"
+                
+                if diagnosis['target_found']:
+                    result_text += f"📊 **Статус:** `{diagnosis['target_status']}`\n\n"
+                
+                # Список всех контейнеров
+                if diagnosis['all_containers']:
+                    result_text += f"📋 **Все контейнеры ({len(diagnosis['all_containers'])}):**\n"
+                    for container in diagnosis['all_containers']:
+                        status_emoji = "🟢" if container['status'] == 'running' else "🔴"
+                        result_text += f"{status_emoji} `{container['name']}` - {container['status']}\n"
+                    result_text += "\n"
+                
+                # Похожие контейнеры
+                if diagnosis['similar_names']:
+                    result_text += f"🔎 **Похожие контейнеры ({len(diagnosis['similar_names'])}):**\n"
+                    for container in diagnosis['similar_names']:
+                        status_emoji = "🟢" if container['status'] == 'running' else "🔴"
+                        result_text += f"{status_emoji} `{container['name']}` - {container['status']}\n"
+                else:
+                    result_text += "🔎 **Похожие контейнеры:** не найдены\n"
+
+            await diag_msg.edit_text(result_text, parse_mode=ParseMode.MARKDOWN)
+
+        except Exception as e:
+            error_text = f"❌ Ошибка диагностики: {str(e)}"
+            await diag_msg.edit_text(error_text)
+            logger.error(f"Ошибка команды /diagnose: {e}")
+
     def _format_status_report(
         self,
         container_status: ContainerStatus,
@@ -560,6 +609,7 @@ class RageBot:
             BotCommand("logs", "Показать логи сервера"),
             BotCommand("info", "Информация о контейнере"),
             BotCommand("players", "Список игроков онлайн"),
+            BotCommand("diagnose", "Диагностика поиска контейнера"),
             BotCommand("help", "Показать справку"),
         ]
 
