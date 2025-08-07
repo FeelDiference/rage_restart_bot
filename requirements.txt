@@ -1,0 +1,25 @@
+# Telegram Bot API
+python-telegram-bot==20.7
+
+# Docker SDK
+docker==6.1.3
+
+# Конфигурация
+PyYAML==6.0.1
+
+# Логирование
+loguru==0.7.2
+
+# HTTP запросы для мониторинга
+requests==2.31.0
+
+# Асинхронность
+asyncio-mqtt==0.16.1
+
+# Тестирование
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Линтинг
+black==23.11.0
+flake8==6.1.0 

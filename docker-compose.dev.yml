@@ -1,0 +1,50 @@
+# Docker Compose для локальной разработки
+# Использует локальную сборку и volumes для live reload
+
+version: '3.8'
+
+services:
+  # Rage Restart Bot (Development)
+  rage-bot-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rage-restart-bot-dev
+    restart: unless-stopped
+    
+    # Монтируем код для разработки
+    volumes:
+      # Docker socket для управления контейнерами
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Код для live reload
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    
+    # Переменные окружения для разработки
+    environment:
+      - PYTHONPATH=/app
+      - TZ=Europe/Moscow
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+    
+    # Сеть для взаимодействия с локальным Rage сервером
+    networks:
+      - rage-network-dev
+    
+    # Ограничения ресурсов для разработки
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.3'
+    
+    # Открываем порты для отладки (опционально)
+    # ports:
+    #   - "5678:5678"  # debugpy
+
+# Сети для разработки
+networks:
+  rage-network-dev:
+    driver: bridge
+    name: rage-network-dev

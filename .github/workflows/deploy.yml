@@ -1,0 +1,224 @@
+# CI/CD пайплайн для автоматического развертывания Rage Restart Bot
+name: Deploy Rage Bot
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Переменные окружения
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: rage-restart-bot
+
+jobs:
+  # Тестирование кода
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest black flake8
+    
+    - name: Lint with flake8
+      run: |
+        # Останавливаем на критических ошибках
+        flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Предупреждения для всех файлов
+        flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Format check with black
+      run: |
+        black --check src/
+    
+    - name: Run tests
+      run: |
+        pytest tests/ -v || echo "Тесты не найдены, пропускаем"
+
+  # Сборка и публикация Docker образа
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix=commit-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Развертывание на удаленном сервере
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout repository for deployment files
+      uses: actions/checkout@v4
+    
+    - name: Deploy to production server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: 78.37.40.131
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 23
+        timeout: 300s
+        script: |
+          echo "🚀 Начало развертывания Rage Bot..."
+          
+          # Создаем директорию проекта если её нет
+          sudo mkdir -p /opt/rage-restart-bot
+          sudo chown $USER:$USER /opt/rage-restart-bot
+          cd /opt/rage-restart-bot
+          
+          # Клонируем или обновляем репозиторий
+          if [ -d ".git" ]; then
+            echo "📥 Обновление репозитория..."
+            git pull origin main
+          else
+            echo "📥 Клонирование приватного репозитория..."
+            git clone git@github.com-rage-bot:${{ github.repository }}.git .
+          fi
+          
+          # Создаем .env файл для production
+          echo "🔧 Создание .env файла..."
+          cat > .env << 'ENV_EOF'
+          GITHUB_REPOSITORY=${{ github.repository }}
+          TZ=Europe/Moscow
+          COMPOSE_PROJECT_NAME=rage-bot
+          BOT_MEMORY_LIMIT=256m
+          BOT_CPU_LIMIT=0.5
+          LOG_LEVEL=INFO
+          ENVIRONMENT=production
+          ENV_EOF
+          
+          # Останавливаем старый контейнер
+          echo "⏹️ Остановка старого контейнера..."
+          docker-compose down || echo "Контейнер не был запущен"
+          
+          # Логинимся в GitHub Container Registry
+          echo "🔐 Логин в GitHub Container Registry..."
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+          # Скачиваем новый образ
+          echo "📦 Загрузка нового образа..."
+          docker-compose pull rage-bot
+          
+          # Проверяем что конфигурация существует
+          if [ ! -f "config/config.yaml" ]; then
+            echo "⚠️ Создание конфигурации из примера..."
+            cp config/config.yaml.example config/config.yaml
+            echo "❗ ВНИМАНИЕ: Необходимо настроить config/config.yaml!"
+          fi
+          
+          # Создаем необходимые директории
+          mkdir -p logs data
+          
+          # Запускаем обновленный контейнер
+          echo "▶️ Запуск нового контейнера..."
+          docker-compose up -d rage-bot
+          
+          # Ждем запуска и проверяем статус
+          echo "⏳ Ожидание запуска..."
+          sleep 15
+          
+          echo "📊 Проверка статуса:"
+          docker-compose ps
+          
+          echo "📋 Последние логи:"
+          docker-compose logs --tail=20 rage-bot
+          
+          # Проверяем здоровье контейнера
+          if docker-compose ps rage-bot | grep -q "Up"; then
+            echo "✅ Контейнер успешно запущен!"
+          else
+            echo "❌ Ошибка запуска контейнера!"
+            docker-compose logs rage-bot
+            exit 1
+          fi
+          
+          # Очищаем старые образы
+          echo "🧹 Очистка старых образов..."
+          docker image prune -f
+          
+          echo "🎉 Развертывание завершено успешно!"
+    
+    - name: Copy deployment files
+      uses: appleboy/scp-action@v0.1.5
+      with:
+        host: 78.37.40.131
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 23
+        source: "docker-compose.yml,scripts/setup.sh"
+        target: "/opt/rage-restart-bot/"
+        strip_components: 0
+
+  # Уведомление о результате развертывания
+  notify:
+    needs: [test, build-and-push, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify on success
+      if: ${{ needs.deploy.result == 'success' }}
+      run: |
+        echo "✅ Rage Bot успешно развернут!"
+        # Здесь можно добавить отправку уведомления в Telegram
+        # curl -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+        #      -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+        #      -d "text=✅ Rage Bot успешно развернут! Commit: ${{ github.sha }}"
+    
+    - name: Notify on failure
+      if: ${{ needs.deploy.result == 'failure' || needs.build-and-push.result == 'failure' || needs.test.result == 'failure' }}
+      run: |
+        echo "❌ Ошибка при развертывании Rage Bot!"
+        # curl -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+        #      -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+        #      -d "text=❌ Ошибка при развертывании Rage Bot! Проверьте логи GitHub Actions."

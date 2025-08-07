@@ -1,0 +1,17 @@
+{
+  "name": "server-status-api",
+  "version": "1.0.0",
+  "description": "HTTP API для получения статуса Rage MP сервера",
+  "main": "index.mjs",
+  "type": "module",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "author": "Rage Bot Team",
+  "license": "MIT",
+  "keywords": ["ragemp", "api", "status", "monitoring"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/rage-restart-bot"
+  }
+}
