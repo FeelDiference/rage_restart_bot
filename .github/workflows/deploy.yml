@@ -24,7 +24,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -68,11 +68,11 @@ jobs:
             echo "📥 Загрузка docker-compose.yml..."
             # Используем -f, чтобы curl вернул ошибку, если файл не найден
             # Добавляем заголовок авторизации для доступа к приватному репозиторию
-            curl -sSLf -H "Authorization: token ${{ secrets.GHCR_TOKEN }}" \
+            curl -sSLf -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -o docker-compose.yml "https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml"
             
             echo "🔐 Логин в GitHub Container Registry..."
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             echo "🔄 Обновление Docker образа..."
             docker compose pull
