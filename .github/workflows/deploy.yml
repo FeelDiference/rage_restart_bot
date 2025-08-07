@@ -85,6 +85,8 @@ jobs:
           type=ref,event=pr
           type=sha,prefix=commit-
           type=raw,value=latest,enable={{is_default_branch}}
+        flavor: |
+          latest=auto
     
     # Настройка Docker Buildx для поддержки кэша
     - name: Set up Docker Buildx
@@ -178,7 +180,9 @@ jobs:
           # Создаем .env файл для production
           echo "🔧 Создание .env файла..."
           DEPLOY_PATH=$(pwd)
-          echo "GITHUB_REPOSITORY=${{ github.repository }}" > .env
+          # Конвертируем repository name в lowercase для Docker
+          REPO_LOWERCASE=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "GITHUB_REPOSITORY=$REPO_LOWERCASE" > .env
           echo "TZ=Europe/Moscow" >> .env
           echo "COMPOSE_PROJECT_NAME=rage-bot" >> .env
           echo "BOT_MEMORY_LIMIT=256m" >> .env
@@ -186,6 +190,7 @@ jobs:
           echo "LOG_LEVEL=INFO" >> .env
           echo "ENVIRONMENT=production" >> .env
           echo "DEPLOY_PATH=$DEPLOY_PATH" >> .env
+          echo "✅ .env файл создан с repository: $REPO_LOWERCASE"
           
           # Останавливаем старый контейнер
           echo "⏹️ Остановка старого контейнера..."
@@ -200,7 +205,7 @@ jobs:
           if docker compose pull rage-bot 2>/dev/null || docker-compose pull rage-bot 2>/dev/null; then
             echo "✅ Образ успешно загружен из registry"
           else
-            echo "⚠️ Не удалось загрузить образ, собираем локально..."
+            echo "⚠️ Не удалось загрузить образ, пробуем локальную сборку..."
             # Используем альтернативный compose файл для сборки
             if [ -f "docker-compose.build.yml" ]; then
               echo "📋 Используем docker-compose.build.yml для локальной сборки"
@@ -208,11 +213,16 @@ jobs:
               if docker compose build rage-bot 2>/dev/null || docker-compose build rage-bot 2>/dev/null; then
                 echo "✅ Локальная сборка завершена успешно"
               else
-                echo "❌ Ошибка локальной сборки, продолжаем с существующим образом"
+                echo "❌ Ошибка локальной сборки, пробуем fallback образ"
                 rm -f docker-compose.override.yml
+                # Устанавливаем fallback образ в .env
+                echo "FALLBACK_IMAGE=python:3.11-slim" >> .env
+                echo "⚠️ Будет использован базовый Python образ"
               fi
             else
-              echo "⚠️ docker-compose.build.yml не найден, используем существующий образ"
+              echo "⚠️ docker-compose.build.yml не найден"
+              echo "FALLBACK_IMAGE=python:3.11-slim" >> .env
+              echo "⚠️ Будет использован базовый Python образ"
             fi
           fi
           

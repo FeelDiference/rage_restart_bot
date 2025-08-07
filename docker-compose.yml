@@ -5,7 +5,7 @@ services:
   # Rage Restart Bot
   rage-bot:
     # Используем готовый образ из GitHub Container Registry для продакшн
-    image: ghcr.io/${GITHUB_REPOSITORY:-your-username/rage-restart-bot}/rage-restart-bot:latest
+    image: ghcr.io/${GITHUB_REPOSITORY:-feeldiference/rage_restart_bot}/rage-restart-bot:latest
     container_name: rage-restart-bot
     restart: unless-stopped
     
