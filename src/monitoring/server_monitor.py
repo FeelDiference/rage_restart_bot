@@ -385,7 +385,7 @@ class ServerMonitor:
         emoji = status_emoji.get(health, "❓")
 
         # Формируем отчет
-        report = f"{emoji} **Статус сервера: {health.value.upper()}**\n\n"
+        report = f"{emoji} Статус сервера: {health.value.upper()}\n\n"
 
         # Информация от Rage сервера (если доступна)
         http_info = details["http_health"]
@@ -396,18 +396,18 @@ class ServerMonitor:
             players_info = server_data.get("players", {})
 
             # Информация о сервере
-            report += f"🎮 **Сервер:** {server_info.get('name', 'Неизвестно')}\n"
+            report += f"🎮 Сервер: {server_info.get('name', 'Неизвестно')}\n"
             report += (
-                f"⏱️ **Uptime:** {server_info.get('uptime_formatted', 'Неизвестно')}\n"
+                f"⏱️ Uptime: {server_info.get('uptime_formatted', 'Неизвестно')}\n"
             )
 
             # Информация об игроках
             online = players_info.get("online", 0)
             max_players = players_info.get("max", 100)
-            report += f"👥 **Игроки:** {online}/{max_players}\n\n"
+            report += f"👥 Игроки: {online}/{max_players}\n\n"
 
         # Информация о портах
-        report += "🔌 **Порты:**\n"
+        report += "🔌 Порты:\n"
         for port, info in details["ports"].items():
             port_emoji = "✅" if info["available"] else "❌"
             response_time = (
@@ -424,11 +424,11 @@ class ServerMonitor:
             else ""
         )
         http_error = f" - {http_info['error']}" if http_info["error"] else ""
-        report += f"\n🌐 **API:** {http_emoji}{http_time}{http_error}\n"
+        report += f"\n🌐 API: {http_emoji}{http_time}{http_error}\n"
 
         # Сводка
         summary = details["summary"]
-        report += "\n📊 **Сводка:**\n"
+        report += "\n📊 Сводка:\n"
         report += f"  • Доступные порты: {summary['available_ports']}\n"
         report += f"  • API доступен: {'Да' if summary['http_accessible'] else 'Нет'}\n"
 

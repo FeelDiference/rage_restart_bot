@@ -189,8 +189,8 @@ class RageBot:
                 container_status, server_health, health_details
             )
 
-            # Обновляем сообщение
-            await status_msg.edit_text(status_text, parse_mode=ParseMode.MARKDOWN)
+            # Обновляем сообщение (без parse_mode из-за проблем с экранированием)
+            await status_msg.edit_text(status_text)
 
         except Exception as e:
             error_text = f"❌ Ошибка при проверке статуса: {str(e)}"
@@ -370,7 +370,8 @@ class RageBot:
             # Форматируем информацию
             info_text = self._format_container_info(container_info)
 
-            await info_msg.edit_text(info_text, parse_mode=ParseMode.MARKDOWN)
+            # Убираем parse_mode из-за проблем с экранированием Markdown
+            await info_msg.edit_text(info_text)
 
         except Exception as e:
             error_text = f"❌ Ошибка получения информации: {str(e)}"
@@ -473,7 +474,7 @@ class RageBot:
         emoji = container_emoji.get(container_status, "❓")
 
         # Основная информация
-        report = f"{emoji} **Контейнер: {container_status.value.upper()}**\n\n"
+        report = f"{emoji} Контейнер: {container_status.value.upper()}\n\n"
 
         # Добавляем отчет о здоровье сервера
         health_report = self.server_monitor.format_health_report(
@@ -487,30 +488,30 @@ class RageBot:
         """
         Форматирует подробную информацию о контейнере.
         """
-        text = f"📊 **Информация о контейнере {info['name']}**\n\n"
+        text = f"📊 Информация о контейнере {info['name']}\n\n"
 
-        text += f"🔍 **Статус:** {info['status']}\n"
-        text += f"🖼️ **Образ:** {info['image']}\n"
-        text += f"🔄 **Перезапуски:** {info['restart_count']}\n\n"
+        text += f"🔍 Статус: {info['status']}\n"
+        text += f"🖼️ Образ: {info['image']}\n"
+        text += f"🔄 Перезапуски: {info['restart_count']}\n\n"
 
         # Время
         if info.get("started_at"):
             started = info["started_at"][:19].replace("T", " ")
-            text += f"▶️ **Запущен:** {started} UTC\n"
+            text += f"▶️ Запущен: {started} UTC\n"
 
         # Ресурсы
         if info.get("cpu_usage") is not None:
-            text += f"🖥️ **CPU:** {info['cpu_usage']}%\n"
+            text += f"🖥️ CPU: {info['cpu_usage']}%\n"
 
         if info.get("memory_usage"):
             mem = info["memory_usage"]
             text += (
-                f"💾 **Память:** {mem['usage']} / {mem['limit']} ({mem['percentage']})\n"
+                f"💾 Память: {mem['usage']} / {mem['limit']} ({mem['percentage']})\n"
             )
 
         # Порты
         if info.get("ports"):
-            text += "\n🔌 **Порты:**\n"
+            text += "\n🔌 Порты:\n"
             for container_port, host_bindings in info["ports"].items():
                 if host_bindings:
                     for binding in host_bindings:
