@@ -73,6 +73,7 @@ class RageBot:
         # Команды
         self.application.add_handler(CommandHandler("start", self._cmd_start))
         self.application.add_handler(CommandHandler("help", self._cmd_help))
+        self.application.add_handler(CommandHandler("chatid", self._cmd_chatid))
         self.application.add_handler(CommandHandler("status", self._cmd_status))
         self.application.add_handler(CommandHandler("restart", self._cmd_restart))
         self.application.add_handler(CommandHandler("stop", self._cmd_stop))
@@ -158,10 +159,10 @@ class RageBot:
             "• `/players` - Список игроков онлайн\n"
             "• `/diagnose` - Диагностика поиска контейнера\n\n"
             "**Статусы сервера:**\n"
-            "• ✅ HEALTHY - Сервер работает нормально\n"
-            "• ⚠️ DEGRADED - Сервер работает с проблемами\n"
-            "• ❌ UNHEALTHY - Сервер не работает\n"
-            "• 🔄 STARTING - Сервер запускается\n\n"
+            "• ✅ РАБОТАЕТ - Сервер работает нормально\n"
+            "• 🔄 ЗАПУСКАЕТСЯ - Сервер в процессе запуска\n"
+            "• ⚠️ ПРОБЛЕМЫ - Сервер работает с проблемами\n"
+            "• ❌ НЕ РАБОТАЕТ - Сервер не работает\n\n"
             "**Безопасность:**\n"
             "• Команды доступны только в авторизованных группах\n"
             "• Ограничение на количество рестартов в час\n"
@@ -169,6 +170,40 @@ class RageBot:
         ).format(self.restart_limit)
 
         await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+
+    async def _cmd_chatid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Команда для получения ID текущего чата (для настройки авторизации).
+        """
+        chat = update.effective_chat
+        user = update.effective_user
+        
+        chat_info = (
+            f"📋 **Информация о чате:**\n\n"
+            f"🆔 **ID чата:** `{chat.id}`\n"
+            f"📝 **Тип:** {chat.type}\n"
+            f"👤 **Ваш ID:** `{user.id}`\n\n"
+        )
+        
+        if chat.type in ['group', 'supergroup']:
+            chat_info += (
+                f"👥 **Название группы:** {chat.title or 'Не указано'}\n\n"
+                f"ℹ️ **Для авторизации добавьте в config.yaml:**\n"
+                f"```yaml\n"
+                f"allowed_groups:\n"
+                f"  - \"{chat.id}\"\n"
+                f"```"
+            )
+        else:
+            chat_info += (
+                f"ℹ️ **Для авторизации ЛС добавьте в config.yaml:**\n"
+                f"```yaml\n"
+                f"admin_users:\n"
+                f"  - \"{user.id}\"\n"
+                f"```"
+            )
+        
+        await update.message.reply_text(chat_info, parse_mode=ParseMode.MARKDOWN)
 
     async def _cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
@@ -220,6 +255,10 @@ class RageBot:
 
             # Выполняем рестарт
             success = self.docker_manager.restart_container()
+            
+            # Отмечаем время рестарта для корректного отображения статуса "ЗАПУСКАЕТСЯ"
+            if success:
+                self.server_monitor.mark_container_restart()
 
             if success:
                 # Проверяем статус после рестарта
@@ -629,11 +668,97 @@ class RageBot:
         # Запускаем бота
         await self.application.initialize()
         await self.application.start()
+        
+        # Запускаем фоновый мониторинг
+        asyncio.create_task(self._monitoring_background_task())
+        
         await self.application.updater.start_polling(
             allowed_updates=Update.ALL_TYPES, drop_pending_updates=True
         )
 
         logger.info("Rage Bot успешно запущен и готов к работе!")
+
+    async def _monitoring_background_task(self):
+        """
+        Фоновая задача мониторинга сервера и отправки уведомлений.
+        """
+        logger.info("Запущен фоновый мониторинг сервера")
+        
+        while True:
+            try:
+                # Проверяем здоровье сервера
+                health, details = self.server_monitor.check_server_health()
+                
+                # Проверяем, изменился ли статус
+                if details.get("status_changed", False):
+                    await self._handle_status_change(health, details)
+                
+                # Ждем перед следующей проверкой (60 секунд)
+                await asyncio.sleep(60)
+                
+            except Exception as e:
+                logger.error(f"Ошибка в фоновом мониторинге: {e}")
+                await asyncio.sleep(60)  # Ждем перед повтором
+    
+    async def _handle_status_change(self, new_status: ServerHealth, details: Dict[str, Any]):
+        """
+        Обрабатывает изменение статуса сервера и отправляет уведомления.
+        """
+        previous_status = details.get("previous_status")
+        
+        # Отправляем уведомление о запуске сервера
+        if (previous_status in ["starting", "unhealthy"] and 
+            new_status == ServerHealth.HEALTHY):
+            
+            message = (
+                "🎉 **Сервер полностью запущен!**\n\n"
+                "✅ Все системы работают нормально\n"
+                "🔗 Игроки могут подключаться к серверу"
+            )
+            
+            await self._send_notification_to_groups(message)
+            logger.info("Отправлено уведомление о полном запуске сервера")
+        
+        # Отправляем уведомления о других важных изменениях статуса
+        elif new_status == ServerHealth.UNHEALTHY and previous_status in ["healthy", "degraded"]:
+            message = (
+                "⚠️ **Внимание! Сервер перестал отвечать**\n\n"
+                "❌ Сервер недоступен\n"
+                "🔄 Попытка автоматического восстановления..."
+            )
+            await self._send_notification_to_groups(message)
+    
+    async def _send_notification_to_groups(self, message: str):
+        """
+        Отправляет уведомление во все разрешенные группы и админам.
+        """
+        try:
+            # Отправляем в группы
+            allowed_groups = config_manager.get_allowed_groups()
+            for group_id in allowed_groups:
+                try:
+                    await self.application.bot.send_message(
+                        chat_id=group_id,
+                        text=message,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                except Exception as e:
+                    logger.error(f"Ошибка отправки уведомления в группу {group_id}: {e}")
+            
+            # Отправляем админам
+            admin_users = config_manager.get_admin_users()
+            for admin_id in admin_users:
+                try:
+                    await self.application.bot.send_message(
+                        chat_id=admin_id,
+                        text=message,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                except Exception as e:
+                    logger.error(f"Ошибка отправки уведомления админу {admin_id}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомлений: {e}")
 
     async def stop(self):
         """

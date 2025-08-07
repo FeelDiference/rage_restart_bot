@@ -47,8 +47,35 @@ class ServerMonitor:
         self.tcp_ports = self.config.get("tcp_ports", [30120])
         self.health_url = self.config.get("health_check_url")
         self.request_timeout = self.config.get("request_timeout", 10)
+        
+        # Отслеживание состояния запуска
+        self._container_restart_time = None
+        self._startup_grace_period = 60  # 60 секунд на запуск
+        self._last_health_status = ServerHealth.UNKNOWN
 
         logger.info("Монитор сервера инициализирован")
+
+    def mark_container_restart(self):
+        """
+        Отмечает время рестарта контейнера для отслеживания периода запуска.
+        """
+        import time
+        self._container_restart_time = time.time()
+        logger.info("Отмечено время рестарта контейнера")
+
+    def _is_in_startup_period(self) -> bool:
+        """
+        Проверяет, находится ли сервер в периоде запуска.
+        
+        Returns:
+            bool: True если сервер еще запускается
+        """
+        if self._container_restart_time is None:
+            return False
+        
+        import time
+        elapsed = time.time() - self._container_restart_time
+        return elapsed < self._startup_grace_period
 
     def check_server_health(self) -> Tuple[ServerHealth, Dict[str, Any]]:
         """
@@ -85,6 +112,15 @@ class ServerMonitor:
                 "http_accessible": http_result["healthy"],
             },
         }
+
+        # Проверяем изменение состояния для уведомлений
+        status_changed = self._last_health_status != health_status
+        previous_status = self._last_health_status
+        self._last_health_status = health_status
+
+        # Добавляем информацию об изменении состояния
+        details["status_changed"] = status_changed
+        details["previous_status"] = previous_status.value if status_changed else None
 
         logger.info(f"Проверка завершена. Статус: {health_status.value}")
         return health_status, details
@@ -230,6 +266,13 @@ class ServerMonitor:
         Returns:
             ServerHealth: Общее состояние здоровья
         """
+        # Если сервер в периоде запуска и есть частичная доступность - возвращаем STARTING
+        if self._is_in_startup_period():
+            if available_ports > 0 or http_healthy:
+                return ServerHealth.STARTING
+            else:
+                return ServerHealth.UNHEALTHY
+
         # Если все порты недоступны - сервер не работает
         if available_ports == 0:
             return ServerHealth.UNHEALTHY
@@ -354,8 +397,19 @@ class ServerMonitor:
 
         emoji = status_emoji.get(health, "❓")
 
+        # Мапа для русских названий статусов
+        status_names = {
+            ServerHealth.HEALTHY: "РАБОТАЕТ",
+            ServerHealth.DEGRADED: "ПРОБЛЕМЫ", 
+            ServerHealth.UNHEALTHY: "НЕ РАБОТАЕТ",
+            ServerHealth.STARTING: "ЗАПУСКАЕТСЯ",
+            ServerHealth.UNKNOWN: "НЕИЗВЕСТНО",
+        }
+        
+        status_name = status_names.get(health, health.value.upper())
+        
         # Формируем отчет
-        report = f"{emoji} Статус сервера: {health.value.upper()}\n\n"
+        report = f"{emoji} Статус сервера: {status_name}\n\n"
 
         # Информация от Rage сервера (если доступна)
         http_info = details["http_health"]
