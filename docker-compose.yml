@@ -4,7 +4,7 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
-    image: ghcr.io/feeldiference/rage_restart_bot/rage-restart-bot:latest
+    image: ghcr.io/feeldiference/rage_restart_bot:latest
     container_name: rage-restart-bot
     restart: unless-stopped
 
