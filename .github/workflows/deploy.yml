@@ -252,17 +252,38 @@ jobs:
               
               # Проверяем установку зависимостей
               echo "🔍 Проверка установленных пакетов..."
-              docker run --rm rage-restart-bot pip list | grep docker || echo "⚠️ Docker пакет не найден в pip list"
+              BUILT_IMAGE="ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest"
+              docker run --rm "$BUILT_IMAGE" pip list | grep docker || echo "⚠️ Docker пакет не найден в pip list"
               
               # Проверяем импорт
               echo "🔍 Тестируем импорт docker модуля..."
-              if docker run --rm rage-restart-bot python -c "import docker; import docker.errors; print('Docker модуль успешно импортирован')"; then
+              if docker run --rm "$BUILT_IMAGE" python -c "import docker; import docker.errors; print('Docker модуль успешно импортирован')"; then
                 echo "✅ Docker модуль работает корректно"
               else
                 echo "❌ Проблема с импортом docker модуля"
                 # Показываем что установлено
                 echo "📋 Список установленных пакетов:"
-                docker run --rm rage-restart-bot pip list
+                docker run --rm "$BUILT_IMAGE" pip list
+                
+                # Детальная диагностика
+                echo "🔍 Диагностика Python окружения:"
+                docker run --rm "$BUILT_IMAGE" python -c "import sys; print('Python version:', sys.version)"
+                docker run --rm "$BUILT_IMAGE" python -c "import sys; print('Python path:', sys.path)"
+                
+                # Проверяем что именно не так с docker модулем
+                echo "🔍 Попытка импорта docker модуля:"
+                docker run --rm "$BUILT_IMAGE" python -c "
+try:
+    import docker
+    print('✅ Базовый модуль docker импортирован')
+    try:
+        from docker.errors import APIError
+        print('✅ docker.errors импортирован')
+    except ImportError as e:
+        print('❌ Ошибка импорта docker.errors:', e)
+except ImportError as e:
+    print('❌ Ошибка импорта docker:', e)
+"
               fi
             else
               echo "❌ Ошибка сборки образа"
@@ -304,19 +325,22 @@ jobs:
             echo ""
             echo "🔧 Попытка экстренного исправления..."
             
-            # Пробуем установить в работающий контейнер
-            if docker exec rage-restart-bot bash -c "pip install --no-cache-dir docker==6.1.3"; then
-              echo "✅ Docker модуль установлен в runtime"
-              docker restart rage-restart-bot
-              sleep 5
-            else
-              echo "❌ Не удалось установить docker модуль даже в runtime"
-              echo "🛠️ Показываем отладочную информацию:"
-              docker exec rage-restart-bot python --version
-              docker exec rage-restart-bot pip --version
-              docker exec rage-restart-bot pip list | head -10
-              exit 1
-            fi
+            # Останавливаем контейнер для исправления
+            docker stop rage-restart-bot
+            
+            # Создаем исправленный образ
+            echo "🛠️ Создание исправленного образа..."
+            docker run -d --name temp-fix "$BUILT_IMAGE" tail -f /dev/null
+            docker exec temp-fix pip install --no-cache-dir docker==6.1.3
+            docker commit temp-fix rage-restart-bot-fixed:latest
+            docker rm -f temp-fix
+            
+            # Обновляем compose файл для использования исправленного образа
+            sed -i "s|ghcr.io/$REPO_LOWERCASE/rage-restart-bot:latest|rage-restart-bot-fixed:latest|g" docker-compose.override.yml
+            
+            echo "🔄 Запуск исправленного контейнера..."
+            docker compose up -d rage-bot
+            sleep 10
           else
             echo "✅ Контейнер запускается без ошибок модулей"
           fi

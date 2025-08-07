@@ -37,8 +37,9 @@ COPY config/ /app/config/
 RUN mkdir -p /app/logs /app/data && \
     chown -R botuser:botuser /app
 
-# Переключаемся на непривилегированного пользователя
-USER botuser
+# ВРЕМЕННО: запускаем под root для доступа к pip модулям
+# TODO: исправить после решения проблемы с docker модулем
+# USER botuser
 
 # Переменные окружения
 ENV PYTHONPATH="/app" \
