@@ -178,16 +178,14 @@ jobs:
           # Создаем .env файл для production
           echo "🔧 Создание .env файла..."
           DEPLOY_PATH=$(pwd)
-          cat > .env << ENV_EOF
-GITHUB_REPOSITORY=${{ github.repository }}
-TZ=Europe/Moscow
-COMPOSE_PROJECT_NAME=rage-bot
-BOT_MEMORY_LIMIT=256m
-BOT_CPU_LIMIT=0.5
-LOG_LEVEL=INFO
-ENVIRONMENT=production
-DEPLOY_PATH=$DEPLOY_PATH
-ENV_EOF
+          echo "GITHUB_REPOSITORY=${{ github.repository }}" > .env
+          echo "TZ=Europe/Moscow" >> .env
+          echo "COMPOSE_PROJECT_NAME=rage-bot" >> .env
+          echo "BOT_MEMORY_LIMIT=256m" >> .env
+          echo "BOT_CPU_LIMIT=0.5" >> .env
+          echo "LOG_LEVEL=INFO" >> .env
+          echo "ENVIRONMENT=production" >> .env
+          echo "DEPLOY_PATH=$DEPLOY_PATH" >> .env
           
           # Останавливаем старый контейнер
           echo "⏹️ Остановка старого контейнера..."
