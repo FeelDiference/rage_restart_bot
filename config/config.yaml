@@ -23,7 +23,7 @@ telegram:
 
 docker:
   # Имя контейнера с Rage сервером
-  container_name: "rage-server"
+  container_name: "rage_server"
   
   # Таймаут для рестарта (в секундах)
   restart_timeout: 30
@@ -36,7 +36,7 @@ monitoring:
   check_interval: 60
   
   # URL для проверки здоровья сервера (HTTP endpoint внутри контейнера)
-  health_check_url: "http://rage-server:30120/status"
+  health_check_url: "http://127.0.0.1:30120/status"
   
   # Таймаут для HTTP запросов
   request_timeout: 10
@@ -48,7 +48,7 @@ monitoring:
     - 30122  # Server query порт
   
   # Хост для проверки портов (IP сервера или имя контейнера)
-  host: "localhost"
+  host: "127.0.0.1"
 
 logging:
   # Уровень логирования
