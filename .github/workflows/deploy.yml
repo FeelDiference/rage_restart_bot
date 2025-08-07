@@ -113,6 +113,18 @@ jobs:
     - name: Checkout repository for deployment files
       uses: actions/checkout@v4
     
+    # Сначала копируем важные файлы
+    - name: Copy deployment files
+      uses: appleboy/scp-action@v0.1.5
+      with:
+        host: 78.37.40.131
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 23
+        source: "docker-compose.yml,docker-compose.build.yml,config/,Dockerfile"
+        target: "/tmp/rage-bot-deploy/"
+        strip_components: 0
+    
     - name: Deploy to production server
       uses: appleboy/ssh-action@v1.0.0
       with:
@@ -136,13 +148,31 @@ jobs:
             cd /opt/rage-restart-bot
           fi
           
-          # Клонируем или обновляем репозиторий
+          # Копируем файлы из временной директории
+          echo "📥 Копирование файлов развертывания..."
+          if [ -d "/tmp/rage-bot-deploy" ]; then
+            cp -r /tmp/rage-bot-deploy/* . 2>/dev/null || echo "⚠️ Некоторые файлы не удалось скопировать"
+            echo "✅ Файлы скопированы из /tmp/rage-bot-deploy"
+          fi
+          
+          # Если Git репозиторий уже есть, обновляем
           if [ -d ".git" ]; then
             echo "📥 Обновление репозитория..."
-            git pull origin main
+            git pull origin main || {
+              echo "⚠️ Не удалось обновить репозиторий, используем скопированные файлы"
+            }
           else
-            echo "📥 Клонирование приватного репозитория..."
-            git clone git@github.com-rage-bot:${{ github.repository }}.git .
+            echo "📥 Клонирование репозитория..."
+            # Используем HTTPS с токеном вместо SSH
+            git clone https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git . || {
+              echo "❌ Не удалось клонировать репозиторий"
+              echo "🔄 Используем скопированные файлы..."
+              # Проверяем что основные файлы есть
+              if [ ! -f "docker-compose.yml" ]; then
+                echo "❌ Критическая ошибка: docker-compose.yml не найден"
+                exit 1
+              fi
+            }
           fi
           
           # Создаем .env файл для production
@@ -228,18 +258,13 @@ jobs:
           echo "🧹 Очистка старых образов..."
           docker image prune -f
           
+          # Очищаем временные файлы
+          echo "🧹 Очистка временных файлов..."
+          rm -rf /tmp/rage-bot-deploy
+          
           echo "🎉 Развертывание завершено успешно!"
     
-    - name: Copy deployment files
-      uses: appleboy/scp-action@v0.1.5
-      with:
-        host: 78.37.40.131
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: 23
-        source: "docker-compose.yml,scripts/setup.sh"
-        target: "/opt/rage-restart-bot/"
-        strip_components: 0
+
 
   # Уведомление о результате развертывания
   notify:
