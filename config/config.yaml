@@ -46,6 +46,10 @@ monitoring:
   # Таймаут для HTTP запросов
   request_timeout: 15
   
+  # Период "мягкого старта" после рестарта контейнера (сек)
+  # В течение этого времени статус может быть starting/degraded без ошибок
+  startup_grace_period: 90
+  
   # Порты для проверки доступности (TCP проверка)
   tcp_ports:
     - 30120  # HTTP API порт (server-status аддон)

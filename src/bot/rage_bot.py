@@ -10,6 +10,8 @@ from typing import Any, Dict
 from loguru import logger
 from telegram import BotCommand, Update
 from telegram.constants import ParseMode
+from telegram.error import NetworkError, TimedOut
+from telegram.request import HTTPXRequest
 from telegram.ext import (
     Application,
     ApplicationHandlerStop,
@@ -58,8 +60,14 @@ class RageBot:
         self.restart_history: Dict[str, list] = {}  # user_id: [timestamps]
 
         # Создаем приложение
+        # ВАЖНО: увеличиваем таймауты HTTP для Telegram API, чтобы избежать ложных
+        # TimedOut при долгих ответах Telegram (наблюдались при редактировании сообщений)
+        request = HTTPXRequest(read_timeout=30.0, connect_timeout=10.0)
         self.application = (
-            Application.builder().token(config_manager.get_telegram_token()).build()
+            Application.builder()
+            .token(config_manager.get_telegram_token())
+            .request(request)
+            .build()
         )
 
         # Регистрируем обработчики
@@ -128,6 +136,58 @@ class RageBot:
             )
             # Останавливаем дальнейшую обработку этого апдейта
             raise ApplicationHandlerStop
+
+    async def _safe_edit_message(
+        self,
+        message,
+        text: str,
+        parse_mode: ParseMode | None = None,
+        max_retries: int = 2,
+    ) -> bool:
+        """
+        Надежное редактирование сообщения с ретраями и фолбэком на новое сообщение.
+
+        Args:
+            message: исходное Telegram сообщение для редактирования
+            text (str): текст для установки
+            parse_mode (Optional[ParseMode]): режим парсинга Telegram
+            max_retries (int): количество повторных попыток при сетевых ошибках
+
+        Returns:
+            bool: True, если редактирование или фолбэк-сообщение отправлены успешно
+        """
+        for attempt in range(max_retries + 1):
+            try:
+                await message.edit_text(text, parse_mode=parse_mode)
+                return True
+            except (TimedOut, NetworkError) as e:
+                # Сетевые проблемы Telegram — пробуем повторить с небольшим бэкофом
+                if attempt < max_retries:
+                    backoff_seconds = 2 * (attempt + 1)
+                    logger.warning(
+                        f"Проблема связи с Telegram при edit_text (попытка {attempt + 1}/{max_retries + 1}): {e}. "
+                        f"Повтор через {backoff_seconds}с"
+                    )
+                    await asyncio.sleep(backoff_seconds)
+                    continue
+                else:
+                    # Фолбэк: отправляем новое сообщение вместо редактирования
+                    try:
+                        await self.application.bot.send_message(
+                            chat_id=message.chat.id, text=text, parse_mode=parse_mode
+                        )
+                        logger.info(
+                            "Не удалось отредактировать сообщение (Telegram timeout). Отправлено новое сообщение."
+                        )
+                        return True
+                    except Exception as send_err:
+                        logger.error(
+                            f"Сбой фолбэка отправки нового сообщения после неудачных edit_text: {send_err}"
+                        )
+                        return False
+            except Exception as e:
+                logger.error(f"Неожиданная ошибка при edit_text: {e}")
+                return False
 
     async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
@@ -289,12 +349,25 @@ class RageBot:
 
                 logger.error(f"Ошибка рестарта сервера пользователем {user_id}")
 
-            await restart_msg.edit_text(result_text, parse_mode=ParseMode.MARKDOWN)
+            # Надежно обновляем сообщение с результатом, чтобы избежать ложного TimedOut
+            await self._safe_edit_message(
+                restart_msg, result_text, parse_mode=ParseMode.MARKDOWN
+            )
 
         except Exception as e:
-            error_text = f"❌ Критическая ошибка при рестарте: {str(e)}"
-            await restart_msg.edit_text(error_text)
-            logger.error(f"Критическая ошибка рестарта: {e}")
+            # Если это сетевой таймаут Telegram — не считаем рестарт неудачным, а сообщаем мягко
+            if isinstance(e, (TimedOut, NetworkError)):
+                warn_text = (
+                    "⚠️ Рестарт выполнен, но Telegram не ответил вовремя при обновлении сообщения.\n"
+                    "Проверьте статус /status."
+                )
+                await self._safe_edit_message(restart_msg, warn_text)
+                logger.warning(f"Сетевой таймаут Telegram при обновлении сообщения: {e}")
+            else:
+                error_text = f"❌ Критическая ошибка при рестарте: {str(e)}"
+                # Пытаемся сообщить об ошибке максимально надежно
+                await self._safe_edit_message(restart_msg, error_text)
+                logger.error(f"Критическая ошибка рестарта: {e}")
 
     async def _cmd_stop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """

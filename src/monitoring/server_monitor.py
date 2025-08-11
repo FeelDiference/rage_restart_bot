@@ -50,7 +50,9 @@ class ServerMonitor:
         
         # Отслеживание состояния запуска
         self._container_restart_time = None
-        self._startup_grace_period = 60  # 60 секунд на запуск
+        # Делаем период мягкого старта настраиваемым, так как HTTP API сервера может
+        # подниматься заметно позже, чем контейнер становится running
+        self._startup_grace_period = self.config.get("startup_grace_period", 90)
         self._last_health_status = ServerHealth.UNKNOWN
 
         logger.info("Монитор сервера инициализирован")
