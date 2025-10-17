@@ -85,6 +85,7 @@ class RageBot:
         self.application.add_handler(CommandHandler("chatid", self._cmd_chatid))
         self.application.add_handler(CommandHandler("status", self._cmd_status))
         self.application.add_handler(CommandHandler("restart", self._cmd_restart))
+        self.application.add_handler(CommandHandler("restart_altv", self._cmd_restart_altv))
         self.application.add_handler(CommandHandler("stop", self._cmd_stop))
         self.application.add_handler(
             CommandHandler("start_server", self._cmd_start_server)
@@ -199,6 +200,7 @@ class RageBot:
             "**Доступные команды:**\n"
             "• /status - Проверить статус сервера\n"
             "• /restart - Перезапустить сервер\n"
+            "• /restart_altv - Перезапустить AltV сервер\n"
             "• /stop - Остановить сервер\n"
             "• /start_server - Запустить сервер\n"
             "• /logs - Показать логи сервера\n"
@@ -220,6 +222,7 @@ class RageBot:
             "**Управление сервером:**\n"
             "• `/status` - Проверить статус и доступность сервера\n"
             "• `/restart` - Перезапустить сервер (лимит: {}/час)\n"
+            "• `/restart_altv` - Перезапустить AltV сервер (лимит: {}/час)\n"
             "• `/stop` - Остановить сервер\n"
             "• `/start_server` - Запустить остановленный сервер\n\n"
             "**Мониторинг:**\n"
@@ -368,6 +371,68 @@ class RageBot:
                 # Пытаемся сообщить об ошибке максимально надежно
                 await self._safe_edit_message(restart_msg, error_text)
                 logger.error(f"Критическая ошибка рестарта: {e}")
+
+    async def _cmd_restart_altv(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Обработчик команды /restart_altv.
+        Перезапускает контейнер altv-server-server-1.
+        """
+        user_id = str(update.effective_user.id)
+        container_name = "altv-server-server-1"
+
+        # Проверяем лимит рестартов (используем тот же лимит что и для основного сервера)
+        if not self._check_restart_limit(user_id):
+            await update.message.reply_text(
+                f"❌ Превышен лимит рестартов ({self.restart_limit}/час).\n"
+                f"Попробуйте позже."
+            )
+            return
+
+        # Отправляем сообщение о начале рестарта
+        restart_msg = await update.message.reply_text(f"🔄 Перезапускаю AltV сервер ({container_name})...")
+
+        try:
+            # Добавляем рестарт в историю
+            self._add_restart_to_history(user_id)
+
+            # Выполняем рестарт контейнера AltV
+            result = self.docker_manager.restart_any_container(container_name)
+
+            if result["success"]:
+                result_text = (
+                    f"✅ **AltV сервер успешно перезапущен!**\n\n"
+                    f"📦 Контейнер: `{container_name}`\n"
+                    f"🔍 Статус: {result['status_before']} → {result['status_after']}\n"
+                    f"👤 Инициатор: {update.effective_user.first_name}"
+                )
+                logger.info(f"Успешный рестарт AltV сервера {container_name} пользователем {user_id}")
+            else:
+                result_text = (
+                    f"❌ **Ошибка при перезапуске AltV сервера!**\n\n"
+                    f"📦 Контейнер: `{container_name}`\n"
+                    f"📝 Детали: {result['message']}\n\n"
+                    f"Проверьте, что контейнер существует и доступен."
+                )
+                logger.error(f"Ошибка рестарта AltV сервера {container_name} пользователем {user_id}: {result['message']}")
+
+            # Надежно обновляем сообщение с результатом
+            await self._safe_edit_message(
+                restart_msg, result_text, parse_mode=ParseMode.MARKDOWN
+            )
+
+        except Exception as e:
+            # Если это сетевой таймаут Telegram — не считаем рестарт неудачным
+            if isinstance(e, (TimedOut, NetworkError)):
+                warn_text = (
+                    f"⚠️ Рестарт AltV сервера выполнен, но Telegram не ответил вовремя.\n"
+                    f"Проверьте статус контейнера вручную."
+                )
+                await self._safe_edit_message(restart_msg, warn_text)
+                logger.warning(f"Сетевой таймаут Telegram при обновлении сообщения AltV рестарта: {e}")
+            else:
+                error_text = f"❌ Критическая ошибка при рестарте AltV сервера: {str(e)}"
+                await self._safe_edit_message(restart_msg, error_text)
+                logger.error(f"Критическая ошибка рестарта AltV сервера: {e}")
 
     async def _cmd_stop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
@@ -726,6 +791,7 @@ class RageBot:
             BotCommand("start", "Запустить бота"),
             BotCommand("status", "Проверить статус сервера"),
             BotCommand("restart", "Перезапустить сервер"),
+            BotCommand("restart_altv", "Перезапустить AltV сервер"),
             BotCommand("stop", "Остановить сервер"),
             BotCommand("start_server", "Запустить сервер"),
             BotCommand("logs", "Показать логи сервера"),

@@ -199,6 +199,73 @@ class DockerManager:
             logger.error(f"Ошибка перезапуска контейнера: {e}")
             return False
 
+    def restart_any_container(self, container_name: str) -> Dict[str, Any]:
+        """
+        Перезапускает любой контейнер по имени.
+
+        Args:
+            container_name (str): Имя контейнера для перезапуска
+
+        Returns:
+            Dict[str, Any]: Результат операции с информацией о статусе
+        """
+        result = {
+            "success": False,
+            "message": "",
+            "container_name": container_name,
+            "status_before": None,
+            "status_after": None
+        }
+        
+        try:
+            container = self.client.containers.get(container_name)
+            
+            # Сохраняем статус до перезапуска
+            result["status_before"] = container.status
+            
+            logger.info(f"Перезапуск контейнера {container_name}")
+            container.restart(timeout=self.restart_timeout)
+
+            # Ждем успешного перезапуска
+            start_time = time.time()
+            timeout = self.restart_timeout * 2
+            
+            while time.time() - start_time < timeout:
+                try:
+                    container.reload()
+                    if container.status == "running":
+                        result["status_after"] = container.status
+                        result["success"] = True
+                        result["message"] = f"Контейнер {container_name} успешно перезапущен"
+                        logger.info(f"Контейнер {container_name} успешно перезапущен")
+                        return result
+                except Exception:
+                    pass
+                
+                time.sleep(2)  # Проверяем каждые 2 секунды
+            
+            # Если не удалось дождаться запуска
+            try:
+                container.reload()
+                result["status_after"] = container.status
+            except Exception:
+                result["status_after"] = "unknown"
+                
+            result["message"] = f"Контейнер {container_name} перезапущен, но не удалось подтвердить статус 'running' в течение {timeout}с"
+            logger.warning(result["message"])
+
+        except NotFound:
+            result["message"] = f"Контейнер '{container_name}' не найден"
+            logger.error(result["message"])
+        except DockerException as e:
+            result["message"] = f"Ошибка при перезапуске контейнера '{container_name}': {str(e)}"
+            logger.error(result["message"])
+        except Exception as e:
+            result["message"] = f"Неожиданная ошибка при перезапуске контейнера '{container_name}': {str(e)}"
+            logger.error(result["message"])
+
+        return result
+
     def get_container_logs(self, lines: int = 50) -> str:
         """
         Получает логи контейнера.
