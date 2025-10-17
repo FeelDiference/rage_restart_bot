@@ -48,17 +48,36 @@ jobs:
       - name: Checkout repository for deployment files
         uses: actions/checkout@v4
 
+      - name: Test SSH connection
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: 81.177.220.187
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          timeout: 30s
+          script: |
+            echo "🔍 Тестирование SSH подключения..."
+            echo "✅ SSH подключение успешно!"
+
       - name: Deploy to production server
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: 78.37.40.131
+          host: 81.177.220.187
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 23
+          port: 22
+          timeout: 60s
+          command_timeout: 10m
           script: |
             set -e # Прерываем выполнение при любой ошибке
             
             echo "🚀 Начало развертывания..."
+            echo "📋 Информация о системе:"
+            echo "  - Пользователь: $(whoami)"
+            echo "  - Директория: $(pwd)"
+            echo "  - Docker версия: $(docker --version)"
+            echo "  - Docker Compose версия: $(docker compose version)"
             
             # Переходим в директорию проекта
             PROJECT_DIR="/home/${{ secrets.SERVER_USER }}/rage-restart-bot"
