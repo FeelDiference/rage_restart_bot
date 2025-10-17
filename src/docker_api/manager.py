@@ -218,7 +218,26 @@ class DockerManager:
         }
         
         try:
-            container = self.client.containers.get(container_name)
+            # Сначала пытаемся найти точное совпадение
+            try:
+                container = self.client.containers.get(container_name)
+            except NotFound:
+                # Если точное совпадение не найдено, ищем по частичному совпадению
+                all_containers = self.client.containers.list(all=True)
+                found_container = None
+                
+                for cont in all_containers:
+                    if container_name.lower() in cont.name.lower() or cont.name.lower() in container_name.lower():
+                        found_container = cont
+                        result["container_name"] = cont.name  # Обновляем имя на найденное
+                        logger.info(f"Найден контейнер по частичному совпадению: {cont.name}")
+                        break
+                
+                if not found_container:
+                    result["message"] = f"Контейнер '{container_name}' не найден. Доступные контейнеры: {[c.name for c in all_containers]}"
+                    return result
+                
+                container = found_container
             
             # Сохраняем статус до перезапуска
             result["status_before"] = container.status
