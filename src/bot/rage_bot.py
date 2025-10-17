@@ -375,10 +375,10 @@ class RageBot:
     async def _cmd_restart_altv(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Обработчик команды /restart_altv.
-        Перезапускает контейнер altv-server-server-1.
+        Перезапускает контейнер altv-server.
         """
         user_id = str(update.effective_user.id)
-        container_name = "altv-server-server-1"
+        container_name = "altv-server"
 
         # Проверяем лимит рестартов (используем тот же лимит что и для основного сервера)
         if not self._check_restart_limit(user_id):
