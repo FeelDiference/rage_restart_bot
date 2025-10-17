@@ -91,7 +91,7 @@ const CONFIG = {
     API_PATH: '/api/status',        // Путь к основному API
     ALLOWED_IPS: [                  // Разрешенные IP
         '127.0.0.1',
-        '78.37.40.131'              // IP вашего бота
+        '81.177.220.187'              // IP вашего бота
     ],
     STATS_UPDATE_INTERVAL: 5000     // Интервал обновления (мс)
 };
@@ -115,7 +115,7 @@ if (!CONFIG.ALLOWED_IPS.includes(clientIP)) {
 
 ```bash
 # Разрешить доступ только с IP бота
-sudo ufw allow from 78.37.40.131 to any port 30120
+sudo ufw allow from 81.177.220.187 to any port 30120
 ```
 
 ## 🐛 Отладка
@@ -137,7 +137,7 @@ sudo ufw allow from 78.37.40.131 to any port 30120
    Убедитесь что URL в конфигурации бота указывает правильно:
    ```yaml
    monitoring:
-     health_check_url: "http://78.37.40.131:30120/api/status"
+     health_check_url: "http://81.177.220.187:30120/api/status"
    ```
 
 ### Типичные проблемы
@@ -162,8 +162,8 @@ sudo ufw allow from 78.37.40.131 to any port 30120
 ```yaml
 # config/config.yaml
 monitoring:
-  health_check_url: "http://78.37.40.131:30120/api/status"
-  host: "78.37.40.131"
+  health_check_url: "http://81.177.220.187:30120/api/status"
+  host: "81.177.220.187"
   tcp_ports:
     - 30120
     - 30121

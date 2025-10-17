@@ -1,6 +1,6 @@
 # Настройка развертывания для приватного репозитория
 
-Инструкции по настройке GitHub Actions для автоматического развертывания на сервер `78.37.40.131:23`.
+Инструкции по настройке GitHub Actions для автоматического развертывания на сервер `81.177.220.187:22`.
 
 ## 🔑 Настройка SSH ключей
 
@@ -23,17 +23,17 @@ ssh-keygen -t rsa -b 4096 -C "deploy@rage-bot" -f ~/.ssh/rage_bot_deploy
 
 ```bash
 # Отправляем публичный ключ на сервер
-ssh-copy-id -i ~/.ssh/rage_bot_deploy.pub -p 23 username@78.37.40.131
+ssh-copy-id -i ~/.ssh/rage_bot_deploy.pub -p 22 username@81.177.220.187
 
 # Или вручную:
-cat ~/.ssh/rage_bot_deploy.pub | ssh -p 23 username@78.37.40.131 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+cat ~/.ssh/rage_bot_deploy.pub | ssh -p 22 username@81.177.220.187 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 ```
 
 ### 3. Тестирование подключения
 
 ```bash
 # Проверяем что SSH подключение работает
-ssh -i ~/.ssh/rage_bot_deploy -p 23 username@78.37.40.131
+ssh -i ~/.ssh/rage_bot_deploy -p 22 username@81.177.220.187
 
 # Если подключение успешно, вы попадете на сервер
 ```
@@ -84,11 +84,11 @@ ssh-keygen -t rsa -b 4096 -C "git-deploy@rage-bot" -f ~/.ssh/rage_bot_git_deploy
 
 ### 3. Настройка Git на сервере
 
-На сервере `78.37.40.131` создайте SSH конфигурацию:
+На сервере `81.177.220.187` создайте SSH конфигурацию:
 
 ```bash
 # Подключаемся к серверу
-ssh -i ~/.ssh/rage_bot_deploy -p 23 username@78.37.40.131
+ssh -i ~/.ssh/rage_bot_deploy -p 22 username@81.177.220.187
 
 # Создаем SSH конфигурацию
 mkdir -p ~/.ssh
@@ -115,7 +115,7 @@ EOF
 
 ```bash
 # Подключаемся к серверу
-ssh -i ~/.ssh/rage_bot_deploy -p 23 username@78.37.40.131
+ssh -i ~/.ssh/rage_bot_deploy -p 22 username@81.177.220.187
 
 # Устанавливаем Docker (если не установлен)
 curl -fsSL https://get.docker.com -o get-docker.sh
@@ -138,11 +138,11 @@ exit
 
 ```bash
 # С локальной машины копируем Deploy ключ на сервер
-scp -i ~/.ssh/rage_bot_deploy -P 23 ~/.ssh/rage_bot_git_deploy username@78.37.40.131:~/.ssh/
-scp -i ~/.ssh/rage_bot_deploy -P 23 ~/.ssh/rage_bot_git_deploy.pub username@78.37.40.131:~/.ssh/
+scp -i ~/.ssh/rage_bot_deploy -P 22 ~/.ssh/rage_bot_git_deploy username@81.177.220.187:~/.ssh/
+scp -i ~/.ssh/rage_bot_deploy -P 22 ~/.ssh/rage_bot_git_deploy.pub username@81.177.220.187:~/.ssh/
 
 # Устанавливаем правильные права
-ssh -i ~/.ssh/rage_bot_deploy -p 23 username@78.37.40.131 "chmod 600 ~/.ssh/rage_bot_git_deploy && chmod 644 ~/.ssh/rage_bot_git_deploy.pub"
+ssh -i ~/.ssh/rage_bot_deploy -p 22 username@81.177.220.187 "chmod 600 ~/.ssh/rage_bot_git_deploy && chmod 644 ~/.ssh/rage_bot_git_deploy.pub"
 ```
 
 ### 3. Первое развертывание
@@ -160,7 +160,7 @@ ssh -i ~/.ssh/rage_bot_deploy -p 23 username@78.37.40.131 "chmod 600 ~/.ssh/rage
 
 ```bash
 # Подключаемся к серверу
-ssh -i ~/.ssh/rage_bot_deploy -p 23 username@78.37.40.131
+ssh -i ~/.ssh/rage_bot_deploy -p 22 username@81.177.220.187
 
 # Переходим в директорию проекта
 cd /opt/rage-restart-bot
@@ -212,7 +212,7 @@ docker-compose logs rage-bot
 
 ```bash
 # Проверка SSH подключения с отладкой
-ssh -v -i ~/.ssh/rage_bot_deploy -p 23 username@78.37.40.131
+ssh -v -i ~/.ssh/rage_bot_deploy -p 22 username@81.177.220.187
 
 # Проверка прав на ключи
 ls -la ~/.ssh/rage_bot_deploy*
