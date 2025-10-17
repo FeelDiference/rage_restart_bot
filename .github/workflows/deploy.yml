@@ -101,6 +101,15 @@ jobs:
             echo "🔄 Обновление Docker образа..."
             docker compose pull
             
+            echo "🔧 Проверка сети rage-network..."
+            # Проверяем существует ли сеть rage-network, если нет - создаем
+            if ! docker network ls | grep -q "rage-network"; then
+              echo "📡 Создаем сеть rage-network"
+              docker network create rage-network
+            else
+              echo "📡 Сеть rage-network уже существует"
+            fi
+            
             echo "▶️ Перезапуск сервиса..."
             docker compose up -d --remove-orphans
             

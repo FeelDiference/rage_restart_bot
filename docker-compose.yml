@@ -30,5 +30,5 @@ services:
 
 networks:
   rage-network:
-    driver: bridge
+    external: true
     name: rage-network
